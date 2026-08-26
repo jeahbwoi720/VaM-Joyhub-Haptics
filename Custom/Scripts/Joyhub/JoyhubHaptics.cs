@@ -168,7 +168,7 @@ namespace MVRPlugin {
 
         public override void Init() {
             try {
-                SuperController.LogMessage("Joyhub Advanced Haptics (Self-Collision Protected) Loading...");
+                SuperController.LogMessage("Joyhub Advanced Haptics (Full Male & Female Genital Matrix) Loading...");
 
                 // ==================== LEFT COLUMN (rightSide = false) ====================
                 CreateSectionHeader("Master Plugin Control", false);
@@ -478,16 +478,28 @@ namespace MVRPlugin {
             } catch (Exception) { }
         }
 
+        // Complete genital detection across Male & Female DAZ / VaM rigs
         private bool IsGenitalName(string name) {
             if (string.IsNullOrEmpty(name)) return false;
             string lower = name.ToLower();
+
+            // DAZ Genesis Male Genital bones: Gen1, Gen2, Gen3, Gen4, Gen5, Gen6, male_genitals, etc.
+            if (lower.StartsWith("gen") || lower.Contains("gen1") || lower.Contains("gen2") ||
+                lower.Contains("gen3") || lower.Contains("gen4") || lower.Contains("gen5") || lower.Contains("gen6")) {
+                return true;
+            }
+
             return lower.Contains("pelvis") || lower.Contains("labia") || lower.Contains("vagina") ||
                    lower.Contains("penis") || lower.Contains("testes") || lower.Contains("anus") ||
                    lower.Contains("glute") || lower.Contains("genital") || lower.Contains("glans") ||
                    lower.Contains("gland") || lower.Contains("shaft") || lower.Contains("scrotum") ||
                    lower.Contains("clit") || lower.Contains("urethra") || lower.Contains("cervix") ||
                    lower.Contains("gspot") || lower.Contains("foreskin") || lower.Contains("tip") ||
-                   lower.Contains("groin") || lower.Contains("crotch");
+                   lower.Contains("groin") || lower.Contains("crotch") || lower.Contains("dick") ||
+                   lower.Contains("cock") || lower.Contains("phallus") || lower.Contains("male_gen") ||
+                   lower.Contains("dildo") || lower.Contains("p_base") || lower.Contains("p_mid") ||
+                   lower.Contains("p_tip") || lower.Contains("penishead") || lower.Contains("penisbase") ||
+                   lower.Contains("penistip");
         }
 
         private bool IsHandName(string name) {
@@ -503,8 +515,7 @@ namespace MVRPlugin {
             string lower = (partName != null) ? partName.ToLower() : "";
             string otherLower = (otherObj != null) ? otherObj.name.ToLower() : "";
 
-            // 1. INTIMATE & GENITAL CONTACT (Hands touching Penis/Glans/Vagina, Penetration, Oral)
-            // If either side involves genitals, it is considered an intimate touch!
+            // 1. INTIMATE & GENITAL CONTACT (Touches involving Penis, Glans, Shaft, Vagina, Labia, Pelvis, Toys)
             if (IsGenitalName(partName) || IsGenitalName(otherLower)) {
                 if (filterGenitalsJSON != null && filterGenitalsJSON.val) {
                     return true;
@@ -520,9 +531,10 @@ namespace MVRPlugin {
                 }
             }
 
-            // 3. MOUTH & HEAD
+            // 3. MOUTH & HEAD (Face mouth, lips, tongue, jaw, neck)
             if (lower.Contains("mouth") || lower.Contains("lip") || lower.Contains("tongue") ||
                 lower.Contains("jaw") || lower.Contains("neck") || lower.Contains("face") ||
+                (lower.Contains("head") && !lower.Contains("penis")) ||
                 otherLower.Contains("mouth") || otherLower.Contains("lip") || otherLower.Contains("tongue")) {
                 if (filterMouthJSON != null && filterMouthJSON.val) {
                     return true;
@@ -556,11 +568,11 @@ namespace MVRPlugin {
                 }
             }
 
-            // Comprehensive Self-Collision Rejection
+            // Self-Collision Filter
             if (target != null) {
                 if (otherObj.transform.IsChildOf(target.transform) || (incomingAtom != null && incomingAtom.name == target.name)) {
                     if (ignoreSelfTouchJSON == null || ignoreSelfTouchJSON.val) {
-                        return false; // Skip self-collisions
+                        return false;
                     }
                 }
             }
@@ -672,15 +684,13 @@ namespace MVRPlugin {
                 if (udpClient != null) {
                     udpClient.Close();
                 }
-                udpClient = new LoveUdpClientWrapper();
+                udpClient = new UdpClient();
                 currentPort = port;
             }
             catch (Exception ex) {
                 SuperController.LogError("JoyhubHaptics UDP Init Error: " + ex);
             }
         }
-
-        private class LoveUdpClientWrapper : UdpClient { }
 
         void Start() {
             Atom target = activeTargetAtom ?? containingAtom;
