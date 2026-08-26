@@ -168,7 +168,7 @@ namespace MVRPlugin {
 
         public override void Init() {
             try {
-                SuperController.LogMessage("Joyhub Advanced Haptics (Complete Glans & Genitals Mapping) Loading...");
+                SuperController.LogMessage("Joyhub Advanced Haptics (Scrollable Dropdowns) Loading...");
 
                 // ==================== LEFT COLUMN (rightSide = false) ====================
                 CreateSectionHeader("Master Plugin Control", false);
@@ -184,9 +184,6 @@ namespace MVRPlugin {
                 UIDynamicPopup personPopup = CreateScrollablePopup(personSelectorJSON, false);
                 if (personPopup != null) {
                     personPopup.popupPanelHeight = 320f;
-                    if (personPopup.popup != null) {
-                        personPopup.popup.showPreviousNextButtons = true;
-                    }
                 }
 
                 UIDynamicButton refreshAtomsBtn = CreateButton("🔄 Refresh Scene Characters", false);
@@ -335,9 +332,6 @@ namespace MVRPlugin {
                 UIDynamicPopup touchingPopup = CreateScrollablePopup(allowedTouchingAtomJSON, true);
                 if (touchingPopup != null) {
                     touchingPopup.popupPanelHeight = 320f;
-                    if (touchingPopup.popup != null) {
-                        touchingPopup.popup.showPreviousNextButtons = true;
-                    }
                 }
 
                 sourcePersonsJSON = new JSONStorableBool("Allow: Other Characters (Persons)", true);
