@@ -80,9 +80,9 @@ namespace MVRPlugin {
 
         // Body Part Filters (What triggers haptics)
         private JSONStorableBool filterGenitalsJSON;
-        private JSONStorableBool filterHandsJSON;
         private JSONStorableBool filterBreastsJSON;
         private JSONStorableBool filterMouthJSON;
+        private JSONStorableBool filterHandsJSON;
         private JSONStorableBool filterOtherJSON;
 
         // Touch Source Filters (What is allowed to touch)
@@ -168,7 +168,7 @@ namespace MVRPlugin {
 
         public override void Init() {
             try {
-                SuperController.LogMessage("Joyhub Advanced Haptics Loading...");
+                SuperController.LogMessage("Joyhub Advanced Haptics (Self-Collision Protected) Loading...");
 
                 // ==================== LEFT COLUMN (rightSide = false) ====================
                 CreateSectionHeader("Master Plugin Control", false);
@@ -304,10 +304,6 @@ namespace MVRPlugin {
                 RegisterBool(filterGenitalsJSON);
                 CreateToggle(filterGenitalsJSON, true);
 
-                filterHandsJSON = new JSONStorableBool("Body Part: Hands & Fingers", true);
-                RegisterBool(filterHandsJSON);
-                CreateToggle(filterHandsJSON, true);
-
                 filterBreastsJSON = new JSONStorableBool("Body Part: Breasts & Chest", false);
                 RegisterBool(filterBreastsJSON);
                 CreateToggle(filterBreastsJSON, true);
@@ -315,6 +311,10 @@ namespace MVRPlugin {
                 filterMouthJSON = new JSONStorableBool("Body Part: Mouth, Lips & Head", false);
                 RegisterBool(filterMouthJSON);
                 CreateToggle(filterMouthJSON, true);
+
+                filterHandsJSON = new JSONStorableBool("Body Part: General Hand & Arm Touch", false);
+                RegisterBool(filterHandsJSON);
+                CreateToggle(filterHandsJSON, true);
 
                 filterOtherJSON = new JSONStorableBool("Body Part: All Other Parts", false);
                 RegisterBool(filterOtherJSON);
@@ -503,21 +503,15 @@ namespace MVRPlugin {
             string lower = (partName != null) ? partName.ToLower() : "";
             string otherLower = (otherObj != null) ? otherObj.name.ToLower() : "";
 
-            // 1. GENITAL INTERACTION
+            // 1. INTIMATE & GENITAL CONTACT (Hands touching Penis/Glans/Vagina, Penetration, Oral)
+            // If either side involves genitals, it is considered an intimate touch!
             if (IsGenitalName(partName) || IsGenitalName(otherLower)) {
                 if (filterGenitalsJSON != null && filterGenitalsJSON.val) {
                     return true;
                 }
             }
 
-            // 2. HANDS & FINGERS
-            if (IsHandName(partName) || IsHandName(otherLower)) {
-                if (filterHandsJSON != null && filterHandsJSON.val) {
-                    return true;
-                }
-            }
-
-            // 3. BREASTS & CHEST
+            // 2. BREASTS & CHEST
             if (lower.Contains("breast") || lower.Contains("nipple") || lower.Contains("chest") ||
                 lower.Contains("boob") || lower.Contains("areola") || lower.Contains("pec") ||
                 otherLower.Contains("breast") || otherLower.Contains("nipple")) {
@@ -526,11 +520,18 @@ namespace MVRPlugin {
                 }
             }
 
-            // 4. MOUTH & HEAD
+            // 3. MOUTH & HEAD
             if (lower.Contains("mouth") || lower.Contains("lip") || lower.Contains("tongue") ||
                 lower.Contains("jaw") || lower.Contains("neck") || lower.Contains("face") ||
                 otherLower.Contains("mouth") || otherLower.Contains("lip") || otherLower.Contains("tongue")) {
                 if (filterMouthJSON != null && filterMouthJSON.val) {
+                    return true;
+                }
+            }
+
+            // 4. GENERAL HAND & ARM TOUCH (Only when explicitly enabled)
+            if (IsHandName(partName) || IsHandName(otherLower)) {
+                if (filterHandsJSON != null && filterHandsJSON.val) {
                     return true;
                 }
             }
@@ -543,19 +544,24 @@ namespace MVRPlugin {
             if (otherObj == null) return false;
 
             Atom target = activeTargetAtom ?? containingAtom;
-            if (target != null) {
-                // Ignore self-collisions (colliding with parts of own hierarchy)
-                if (otherObj.transform.IsChildOf(target.transform)) {
-                    if (ignoreSelfTouchJSON == null || ignoreSelfTouchJSON.val) {
-                        return false;
-                    }
+
+            // Find parent Atom of colliding object
+            Atom incomingAtom = otherObj.GetComponentInParent<Atom>();
+            if (incomingAtom == null) {
+                Transform p = otherObj.transform;
+                while (p != null) {
+                    Atom a = p.GetComponent<Atom>();
+                    if (a != null) { incomingAtom = a; break; }
+                    p = p.parent;
                 }
             }
 
-            Atom incomingAtom = otherObj.GetComponentInParent<Atom>();
-            if (target != null && incomingAtom != null && incomingAtom == target) {
-                if (ignoreSelfTouchJSON == null || ignoreSelfTouchJSON.val) {
-                    return false;
+            // Comprehensive Self-Collision Rejection
+            if (target != null) {
+                if (otherObj.transform.IsChildOf(target.transform) || (incomingAtom != null && incomingAtom.name == target.name)) {
+                    if (ignoreSelfTouchJSON == null || ignoreSelfTouchJSON.val) {
+                        return false; // Skip self-collisions
+                    }
                 }
             }
 
@@ -666,13 +672,15 @@ namespace MVRPlugin {
                 if (udpClient != null) {
                     udpClient.Close();
                 }
-                udpClient = new UdpClient();
+                udpClient = new LoveUdpClientWrapper();
                 currentPort = port;
             }
             catch (Exception ex) {
                 SuperController.LogError("JoyhubHaptics UDP Init Error: " + ex);
             }
         }
+
+        private class LoveUdpClientWrapper : UdpClient { }
 
         void Start() {
             Atom target = activeTargetAtom ?? containingAtom;
