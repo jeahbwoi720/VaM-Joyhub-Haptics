@@ -80,9 +80,9 @@ namespace MVRPlugin {
 
         // Body Part Filters (What triggers haptics)
         private JSONStorableBool filterGenitalsJSON;
+        private JSONStorableBool filterHandsJSON;
         private JSONStorableBool filterBreastsJSON;
         private JSONStorableBool filterMouthJSON;
-        private JSONStorableBool filterHandsJSON;
         private JSONStorableBool filterOtherJSON;
 
         // Touch Source Filters (What is allowed to touch)
@@ -168,7 +168,7 @@ namespace MVRPlugin {
 
         public override void Init() {
             try {
-                SuperController.LogMessage("Joyhub Advanced Haptics (Precision Smart Filtering) Loading...");
+                SuperController.LogMessage("Joyhub Advanced Haptics Loading...");
 
                 // ==================== LEFT COLUMN (rightSide = false) ====================
                 CreateSectionHeader("Master Plugin Control", false);
@@ -300,9 +300,13 @@ namespace MVRPlugin {
                 CreateToggle(duringPumpJSON, true);
 
                 CreateSectionHeader("Targeted Body Parts", true);
-                filterGenitalsJSON = new JSONStorableBool("Body Part: Genitals & Intimate Touch", true);
+                filterGenitalsJSON = new JSONStorableBool("Body Part: Genitals (Penis/Glans/Vagina)", true);
                 RegisterBool(filterGenitalsJSON);
                 CreateToggle(filterGenitalsJSON, true);
+
+                filterHandsJSON = new JSONStorableBool("Body Part: Hands & Fingers", true);
+                RegisterBool(filterHandsJSON);
+                CreateToggle(filterHandsJSON, true);
 
                 filterBreastsJSON = new JSONStorableBool("Body Part: Breasts & Chest", false);
                 RegisterBool(filterBreastsJSON);
@@ -311,10 +315,6 @@ namespace MVRPlugin {
                 filterMouthJSON = new JSONStorableBool("Body Part: Mouth, Lips & Head", false);
                 RegisterBool(filterMouthJSON);
                 CreateToggle(filterMouthJSON, true);
-
-                filterHandsJSON = new JSONStorableBool("Body Part: General Hand & Arm Touch", false);
-                RegisterBool(filterHandsJSON);
-                CreateToggle(filterHandsJSON, true);
 
                 filterOtherJSON = new JSONStorableBool("Body Part: All Other Parts", false);
                 RegisterBool(filterOtherJSON);
@@ -503,15 +503,21 @@ namespace MVRPlugin {
             string lower = (partName != null) ? partName.ToLower() : "";
             string otherLower = (otherObj != null) ? otherObj.name.ToLower() : "";
 
-            // 1. INTIMATE / GENITAL CONTACT (Hands on Penis/Glans, Penis in Vagina, Oral, etc.)
-            // If either side involves genitals, it is an intimate touch!
+            // 1. GENITAL INTERACTION
             if (IsGenitalName(partName) || IsGenitalName(otherLower)) {
                 if (filterGenitalsJSON != null && filterGenitalsJSON.val) {
                     return true;
                 }
             }
 
-            // 2. BREASTS & CHEST
+            // 2. HANDS & FINGERS
+            if (IsHandName(partName) || IsHandName(otherLower)) {
+                if (filterHandsJSON != null && filterHandsJSON.val) {
+                    return true;
+                }
+            }
+
+            // 3. BREASTS & CHEST
             if (lower.Contains("breast") || lower.Contains("nipple") || lower.Contains("chest") ||
                 lower.Contains("boob") || lower.Contains("areola") || lower.Contains("pec") ||
                 otherLower.Contains("breast") || otherLower.Contains("nipple")) {
@@ -520,18 +526,11 @@ namespace MVRPlugin {
                 }
             }
 
-            // 3. MOUTH & HEAD
+            // 4. MOUTH & HEAD
             if (lower.Contains("mouth") || lower.Contains("lip") || lower.Contains("tongue") ||
                 lower.Contains("jaw") || lower.Contains("neck") || lower.Contains("face") ||
                 otherLower.Contains("mouth") || otherLower.Contains("lip") || otherLower.Contains("tongue")) {
                 if (filterMouthJSON != null && filterMouthJSON.val) {
-                    return true;
-                }
-            }
-
-            // 4. GENERAL HAND TOUCH (Only when Hands & Arms filter is explicitly enabled)
-            if (IsHandName(partName) || IsHandName(otherLower)) {
-                if (filterHandsJSON != null && filterHandsJSON.val) {
                     return true;
                 }
             }
@@ -545,8 +544,8 @@ namespace MVRPlugin {
 
             Atom target = activeTargetAtom ?? containingAtom;
             if (target != null) {
-                // Strict self-collision filtering
-                if (otherObj.transform.IsChildOf(target.transform) || otherObj.transform.root == target.transform.root) {
+                // Ignore self-collisions (colliding with parts of own hierarchy)
+                if (otherObj.transform.IsChildOf(target.transform)) {
                     if (ignoreSelfTouchJSON == null || ignoreSelfTouchJSON.val) {
                         return false;
                     }
@@ -554,7 +553,7 @@ namespace MVRPlugin {
             }
 
             Atom incomingAtom = otherObj.GetComponentInParent<Atom>();
-            if (target != null && incomingAtom == target) {
+            if (target != null && incomingAtom != null && incomingAtom == target) {
                 if (ignoreSelfTouchJSON == null || ignoreSelfTouchJSON.val) {
                     return false;
                 }
@@ -610,12 +609,12 @@ namespace MVRPlugin {
             if (collision == null || collision.collider == null) return;
 
             GameObject otherObj = collision.collider.gameObject;
-            if (!IsBodyPartEnabled(partName, otherObj)) return;
-
             string sourceName;
             if (!IsTouchingSourceAllowed(otherObj, out sourceName)) {
                 return;
             }
+
+            if (!IsBodyPartEnabled(partName, otherObj)) return;
 
             float relVel = collision.relativeVelocity.magnitude;
             RegisterActiveTouch(partName, otherObj.name, sourceName, relVel);
@@ -623,7 +622,6 @@ namespace MVRPlugin {
 
         public void HandleTrigger(string partName, Collider other) {
             if (enabledJSON == null || !enabledJSON.val) return;
-            if (!IsBodyPartEnabled(partName, other != null ? other.gameObject : null)) return;
             if (other == null) return;
 
             GameObject otherObj = other.gameObject;
@@ -631,6 +629,8 @@ namespace MVRPlugin {
             if (!IsTouchingSourceAllowed(otherObj, out sourceName)) {
                 return;
             }
+
+            if (!IsBodyPartEnabled(partName, otherObj)) return;
 
             RegisterActiveTouch(partName, otherObj.name, sourceName, 1.0f);
         }
