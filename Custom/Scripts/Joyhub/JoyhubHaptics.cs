@@ -17,26 +17,26 @@ namespace MVRPlugin {
             public string bodyPartName = "";
 
             void OnCollisionEnter(Collision collision) {
-                if (parentPlugin != null && enabled) {
-                    parentPlugin.HandleCollision(bodyPartName, collision);
+                if (parentPlugin != null && enabled && collision != null) {
+                    parentPlugin.HandleCollisionOrTrigger(bodyPartName, collision.collider, collision.relativeVelocity.magnitude);
                 }
             }
 
             void OnCollisionStay(Collision collision) {
-                if (parentPlugin != null && enabled) {
-                    parentPlugin.HandleCollision(bodyPartName, collision);
+                if (parentPlugin != null && enabled && collision != null) {
+                    parentPlugin.HandleCollisionOrTrigger(bodyPartName, collision.collider, collision.relativeVelocity.magnitude);
                 }
             }
 
             void OnTriggerEnter(Collider other) {
-                if (parentPlugin != null && enabled) {
-                    parentPlugin.HandleTrigger(bodyPartName, other);
+                if (parentPlugin != null && enabled && other != null) {
+                    parentPlugin.HandleCollisionOrTrigger(bodyPartName, other, 1.0f);
                 }
             }
 
             void OnTriggerStay(Collider other) {
-                if (parentPlugin != null && enabled) {
-                    parentPlugin.HandleTrigger(bodyPartName, other);
+                if (parentPlugin != null && enabled && other != null) {
+                    parentPlugin.HandleCollisionOrTrigger(bodyPartName, other, 1.0f);
                 }
             }
         }
@@ -118,6 +118,7 @@ namespace MVRPlugin {
         private float lastFinalIntensity = 0f;
 
         private List<JoyhubCollisionForwarder> activeForwarders = new List<JoyhubCollisionForwarder>();
+        private HashSet<Collider> myTargetColliders = new HashSet<Collider>();
 
         private void CreateSectionHeader(string title, bool rightSide) {
             try {
@@ -168,7 +169,7 @@ namespace MVRPlugin {
 
         public override void Init() {
             try {
-                SuperController.LogMessage("Joyhub Advanced Haptics (Precision Anatomy) Loading...");
+                SuperController.LogMessage("Joyhub Advanced Haptics (Collision HashSet Architecture) Loading...");
 
                 // ==================== LEFT COLUMN (rightSide = false) ====================
                 CreateSectionHeader("Master Plugin Control", false);
@@ -424,7 +425,7 @@ namespace MVRPlugin {
                 if (activeTargetAtom != null) {
                     lastPosition = activeTargetAtom.transform.position;
                     SetupBodyPartForwarders(activeTargetAtom);
-                    SuperController.LogMessage(string.Format("JoyhubHaptics: Bound sensors to Atom '{0}' ({1} colliders/triggers)", activeTargetAtom.name, activeForwarders.Count));
+                    SuperController.LogMessage(string.Format("JoyhubHaptics: Bound sensors to Atom '{0}' ({1} colliders/triggers)", activeTargetAtom.name, myTargetColliders.Count));
                 }
             }
             catch (Exception ex) {
@@ -435,10 +436,13 @@ namespace MVRPlugin {
         private void SetupBodyPartForwarders(Atom target) {
             try {
                 if (target == null) return;
+                myTargetColliders.Clear();
 
                 Collider[] colliders = target.GetComponentsInChildren<Collider>(true);
                 foreach (Collider col in colliders) {
                     if (col == null || col.gameObject == null) continue;
+
+                    myTargetColliders.Add(col);
 
                     JoyhubCollisionForwarder fwd = col.gameObject.GetComponent<JoyhubCollisionForwarder>();
                     if (fwd == null) {
@@ -452,6 +456,9 @@ namespace MVRPlugin {
                 Rigidbody[] rbs = target.GetComponentsInChildren<Rigidbody>(true);
                 foreach (Rigidbody rb in rbs) {
                     if (rb == null || rb.gameObject == null) continue;
+
+                    Collider c = rb.GetComponent<Collider>();
+                    if (c != null) myTargetColliders.Add(c);
 
                     JoyhubCollisionForwarder fwd = rb.gameObject.GetComponent<JoyhubCollisionForwarder>();
                     if (fwd == null) {
@@ -475,25 +482,26 @@ namespace MVRPlugin {
                     }
                 }
                 activeForwarders.Clear();
+                myTargetColliders.Clear();
             } catch (Exception) { }
         }
 
-        // Precise Genital recognition that ignores broad "genesis" character roots
+        // Complete standard genital identification across VaM AutoColliders and DAZ rigs
         private bool IsGenitalName(string name) {
             if (string.IsNullOrEmpty(name)) return false;
             string lower = name.ToLower();
 
-            // Ignore general character mesh root names
+            // Reject general body meshes
             if (lower == "genesis" || lower == "genesis8" || lower == "genesis8female" ||
                 lower == "genesis8male" || lower == "genesis2" || lower == "genesis3" ||
                 lower.StartsWith("generic")) {
                 return false;
             }
 
-            // Exact DAZ Genesis male genital bones (gen1, gen2, gen3, gen4, gen5, gen6)
-            if (lower == "gen" || lower.StartsWith("gen1") || lower.StartsWith("gen2") ||
+            // Standard VaM Male Penis AutoColliders: AutoColliderGen1Hard, AutoColliderGen2Hard, AutoColliderGen3aHard, AutoColliderGen3bHard
+            if (lower.Contains("autocollidergen") || lower.StartsWith("gen1") || lower.StartsWith("gen2") ||
                 lower.StartsWith("gen3") || lower.StartsWith("gen4") || lower.StartsWith("gen5") ||
-                lower.StartsWith("gen6") || lower.Contains("genital") || lower.Contains("male_gen")) {
+                lower.StartsWith("gen6") || lower.Contains("male_gen")) {
                 return true;
             }
 
@@ -521,7 +529,7 @@ namespace MVRPlugin {
             string lower = (partName != null) ? partName.ToLower() : "";
             string otherLower = (otherObj != null) ? otherObj.name.ToLower() : "";
 
-            // 1. INTIMATE & GENITAL CONTACT (Touches involving Penis, Glans, Shaft, Vagina, Labia, Pelvis, Toys)
+            // 1. INTIMATE & GENITAL CONTACT (Penis, Glans, Shaft, Vagina, Labia, Pelvis, Toys)
             if (IsGenitalName(partName) || IsGenitalName(otherLower)) {
                 if (filterGenitalsJSON != null && filterGenitalsJSON.val) {
                     return true;
@@ -537,7 +545,7 @@ namespace MVRPlugin {
                 }
             }
 
-            // 3. MOUTH & HEAD (Face mouth, lips, tongue, jaw, neck)
+            // 3. MOUTH & HEAD
             if (lower.Contains("mouth") || lower.Contains("lip") || lower.Contains("tongue") ||
                 lower.Contains("jaw") || lower.Contains("neck") || lower.Contains("face") ||
                 (lower.Contains("head") && !lower.Contains("penis")) ||
@@ -547,7 +555,7 @@ namespace MVRPlugin {
                 }
             }
 
-            // 4. GENERAL HAND & ARM TOUCH (Only when explicitly enabled)
+            // 4. GENERAL HAND & ARM TOUCH
             if (IsHandName(partName) || IsHandName(otherLower)) {
                 if (filterHandsJSON != null && filterHandsJSON.val) {
                     return true;
@@ -557,14 +565,25 @@ namespace MVRPlugin {
             return (filterOtherJSON != null && filterOtherJSON.val);
         }
 
-        private bool IsTouchingSourceAllowed(GameObject otherObj, out string sourceName) {
+        private bool IsTouchingSourceAllowed(Collider otherCollider, GameObject otherObj, out string sourceName) {
             sourceName = "Unknown";
-            if (otherObj == null) return false;
+            if (otherObj == null || otherCollider == null) return false;
+
+            // 1. 100% Guaranteed Self-Collision Filter via Collider HashSet
+            if (ignoreSelfTouchJSON == null || ignoreSelfTouchJSON.val) {
+                if (myTargetColliders.Contains(otherCollider)) {
+                    return false; // Direct self-collider on same character!
+                }
+            }
 
             Atom target = activeTargetAtom ?? containingAtom;
 
-            // Find parent Atom of colliding object
+            // 2. Find parent Atom of colliding object
             Atom incomingAtom = otherObj.GetComponentInParent<Atom>();
+            if (incomingAtom == null && otherCollider != null) {
+                incomingAtom = otherCollider.GetComponentInParent<Atom>();
+            }
+
             if (incomingAtom == null) {
                 Transform p = otherObj.transform;
                 while (p != null) {
@@ -574,11 +593,11 @@ namespace MVRPlugin {
                 }
             }
 
-            // Self-Collision Filter
+            // Check if incoming object belongs to same target atom
             if (target != null) {
-                if (otherObj.transform.IsChildOf(target.transform) || (incomingAtom != null && incomingAtom.name == target.name)) {
+                if (incomingAtom == target || (incomingAtom != null && incomingAtom.name == target.name) || otherObj.transform.IsChildOf(target.transform)) {
                     if (ignoreSelfTouchJSON == null || ignoreSelfTouchJSON.val) {
-                        return false;
+                        return false; // Skip self-collisions
                     }
                 }
             }
@@ -628,35 +647,19 @@ namespace MVRPlugin {
             return true;
         }
 
-        public void HandleCollision(string partName, Collision collision) {
+        public void HandleCollisionOrTrigger(string partName, Collider otherCollider, float relativeVelocity) {
             if (enabledJSON == null || !enabledJSON.val) return;
-            if (collision == null || collision.collider == null) return;
+            if (otherCollider == null) return;
 
-            GameObject otherObj = collision.collider.gameObject;
+            GameObject otherObj = otherCollider.gameObject;
             string sourceName;
-            if (!IsTouchingSourceAllowed(otherObj, out sourceName)) {
+            if (!IsTouchingSourceAllowed(otherCollider, otherObj, out sourceName)) {
                 return;
             }
 
             if (!IsBodyPartEnabled(partName, otherObj)) return;
 
-            float relVel = collision.relativeVelocity.magnitude;
-            RegisterActiveTouch(partName, otherObj.name, sourceName, relVel);
-        }
-
-        public void HandleTrigger(string partName, Collider other) {
-            if (enabledJSON == null || !enabledJSON.val) return;
-            if (other == null) return;
-
-            GameObject otherObj = other.gameObject;
-            string sourceName;
-            if (!IsTouchingSourceAllowed(otherObj, out sourceName)) {
-                return;
-            }
-
-            if (!IsBodyPartEnabled(partName, otherObj)) return;
-
-            RegisterActiveTouch(partName, otherObj.name, sourceName, 1.0f);
+            RegisterActiveTouch(partName, otherObj.name, sourceName, relativeVelocity);
         }
 
         private void RegisterActiveTouch(string partName, string colliderName, string sourceName, float relativeVelocity) {
