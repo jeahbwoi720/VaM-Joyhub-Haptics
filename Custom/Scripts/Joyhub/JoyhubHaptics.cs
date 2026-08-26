@@ -234,11 +234,11 @@ namespace MVRPlugin {
 
                 // ==================== RIGHT COLUMN (rightSide = true) ====================
                 CreateSectionHeader("During Touch (Active Contact)", true);
-                duringVibeJSON = new JSONStorableFloat("During Touch: Vibe % (Ch 1)", 85f, 0f, 100f, true);
+                duringVibeJSON = new JSONStorableFloat("During Touch: Vibe % (Ch 1)", 15f, 0f, 100f, true);
                 RegisterFloat(duringVibeJSON);
                 CreateSlider(duringVibeJSON, true);
 
-                duringCh2JSON = new JSONStorableFloat("During Touch: Motor 2 (Ch 2) %", 85f, 0f, 100f, true);
+                duringCh2JSON = new JSONStorableFloat("During Touch: Motor 2 (Ch 2) %", 15f, 0f, 100f, true);
                 RegisterFloat(duringCh2JSON);
                 CreateSlider(duringCh2JSON, true);
 
@@ -468,7 +468,7 @@ namespace MVRPlugin {
                 impactBonus = Mathf.Clamp((relativeVelocity - 0.3f) * 15f * sensMultiplier, 0f, 35f);
             }
 
-            float targetValue = (duringVibeJSON != null ? duringVibeJSON.val : 85f) + impactBonus;
+            float targetValue = (duringVibeJSON != null ? duringVibeJSON.val : 15f) + impactBonus;
             touchIntensity = Mathf.Max(touchIntensity, Mathf.Clamp(targetValue, 0f, 100f));
         }
 
@@ -569,7 +569,7 @@ namespace MVRPlugin {
                 }
                 else if (isCurrentlyActiveTouch || isFading) {
                     // DURING TOUCH / FADING RELEASE STATE
-                    float duringBase = isCurrentlyActiveTouch ? (duringVibeJSON != null ? duringVibeJSON.val : 85f) : 0f;
+                    float duringBase = isCurrentlyActiveTouch ? (duringVibeJSON != null ? duringVibeJSON.val : 15f) : 0f;
 
                     // Motion Velocity Tracking
                     float velocityIntensity = 0f;
