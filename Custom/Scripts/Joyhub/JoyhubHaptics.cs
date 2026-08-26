@@ -79,7 +79,8 @@ namespace MVRPlugin {
         private JSONStorableBool duringPumpJSON;
 
         // Body Part Filters (What triggers haptics)
-        private JSONStorableBool filterGenitalsJSON;
+        private JSONStorableBool filterPenisJSON;
+        private JSONStorableBool filterVaginaJSON;
         private JSONStorableBool filterBreastsJSON;
         private JSONStorableBool filterMouthJSON;
         private JSONStorableBool filterHandsJSON;
@@ -169,7 +170,7 @@ namespace MVRPlugin {
 
         public override void Init() {
             try {
-                SuperController.LogMessage("Joyhub Advanced Haptics (Collision HashSet Architecture) Loading...");
+                SuperController.LogMessage("Joyhub Advanced Haptics (Dedicated Anatomy Filters) Loading...");
 
                 // ==================== LEFT COLUMN (rightSide = false) ====================
                 CreateSectionHeader("Master Plugin Control", false);
@@ -301,9 +302,13 @@ namespace MVRPlugin {
                 CreateToggle(duringPumpJSON, true);
 
                 CreateSectionHeader("Targeted Body Parts", true);
-                filterGenitalsJSON = new JSONStorableBool("Body Part: Genitals (Penis/Glans/Vagina)", true);
-                RegisterBool(filterGenitalsJSON);
-                CreateToggle(filterGenitalsJSON, true);
+                filterPenisJSON = new JSONStorableBool("Body Part: Male Penis & Glans", true);
+                RegisterBool(filterPenisJSON);
+                CreateToggle(filterPenisJSON, true);
+
+                filterVaginaJSON = new JSONStorableBool("Body Part: Female Vagina & Labia", true);
+                RegisterBool(filterVaginaJSON);
+                CreateToggle(filterVaginaJSON, true);
 
                 filterBreastsJSON = new JSONStorableBool("Body Part: Breasts & Chest", false);
                 RegisterBool(filterBreastsJSON);
@@ -486,34 +491,37 @@ namespace MVRPlugin {
             } catch (Exception) { }
         }
 
-        // Complete standard genital identification across VaM AutoColliders and DAZ rigs
-        private bool IsGenitalName(string name) {
+        // Dedicated Male Genital Detection (Penis, Glans, Shaft, Testicles, AutoColliderGen1-3)
+        private bool IsMaleGenitalName(string name) {
             if (string.IsNullOrEmpty(name)) return false;
             string lower = name.ToLower();
 
-            // Reject general body meshes
             if (lower == "genesis" || lower == "genesis8" || lower == "genesis8female" ||
                 lower == "genesis8male" || lower == "genesis2" || lower == "genesis3" ||
-                lower.StartsWith("generic")) {
-                return false;
-            }
+                lower.StartsWith("generic")) return false;
 
-            // Standard VaM Male Penis AutoColliders: AutoColliderGen1Hard, AutoColliderGen2Hard, AutoColliderGen3aHard, AutoColliderGen3bHard
-            if (lower.Contains("autocollidergen") || lower.StartsWith("gen1") || lower.StartsWith("gen2") ||
-                lower.StartsWith("gen3") || lower.StartsWith("gen4") || lower.StartsWith("gen5") ||
-                lower.StartsWith("gen6") || lower.Contains("male_gen")) {
-                return true;
-            }
+            return lower.Contains("autocollidergen") || lower.StartsWith("gen1") || lower.StartsWith("gen2") ||
+                   lower.StartsWith("gen3") || lower.StartsWith("gen4") || lower.StartsWith("gen5") ||
+                   lower.StartsWith("gen6") || lower.Contains("male_gen") || lower.Contains("penis") ||
+                   lower.Contains("glans") || lower.Contains("gland") || lower.Contains("shaft") ||
+                   lower.Contains("testes") || lower.Contains("scrotum") || lower.Contains("foreskin") ||
+                   lower.Contains("urethra") || lower.Contains("penishead") || lower.Contains("penisbase") ||
+                   lower.Contains("penistip") || lower.Contains("p_base") || lower.Contains("p_mid") ||
+                   lower.Contains("p_tip") || lower.Contains("dick") || lower.Contains("cock") || lower.Contains("phallus");
+        }
 
-            return lower.Contains("pelvis") || lower.Contains("labia") || lower.Contains("vagina") ||
-                   lower.Contains("penis") || lower.Contains("testes") || lower.Contains("anus") ||
-                   lower.Contains("glute") || lower.Contains("glans") || lower.Contains("gland") ||
-                   lower.Contains("shaft") || lower.Contains("scrotum") || lower.Contains("clit") ||
-                   lower.Contains("urethra") || lower.Contains("cervix") || lower.Contains("gspot") ||
-                   lower.Contains("foreskin") || lower.Contains("dick") || lower.Contains("cock") ||
-                   lower.Contains("phallus") || lower.Contains("dildo") || lower.Contains("p_base") ||
-                   lower.Contains("p_mid") || lower.Contains("p_tip") || lower.Contains("penishead") ||
-                   lower.Contains("penisbase") || lower.Contains("penistip");
+        // Dedicated Female Genital Detection (Vagina, Labia, Clitoris, Pelvic Triggers)
+        private bool IsFemaleGenitalName(string name) {
+            if (string.IsNullOrEmpty(name)) return false;
+            string lower = name.ToLower();
+
+            if (lower == "genesis" || lower == "genesis8" || lower == "genesis8female" ||
+                lower == "genesis8male" || lower == "genesis2" || lower == "genesis3" ||
+                lower.StartsWith("generic")) return false;
+
+            return lower.Contains("labia") || lower.Contains("vagina") || lower.Contains("clit") ||
+                   lower.Contains("cervix") || lower.Contains("gspot") || lower.Contains("pelvis") ||
+                   lower.Contains("crotch") || lower.Contains("labiatrig") || lower.Contains("vaginatrig");
         }
 
         private bool IsHandName(string name) {
@@ -529,14 +537,21 @@ namespace MVRPlugin {
             string lower = (partName != null) ? partName.ToLower() : "";
             string otherLower = (otherObj != null) ? otherObj.name.ToLower() : "";
 
-            // 1. INTIMATE & GENITAL CONTACT (Penis, Glans, Shaft, Vagina, Labia, Pelvis, Toys)
-            if (IsGenitalName(partName) || IsGenitalName(otherLower)) {
-                if (filterGenitalsJSON != null && filterGenitalsJSON.val) {
+            // 1. MALE PENIS & GLANS
+            if (IsMaleGenitalName(partName) || IsMaleGenitalName(otherLower)) {
+                if (filterPenisJSON != null && filterPenisJSON.val) {
                     return true;
                 }
             }
 
-            // 2. BREASTS & CHEST
+            // 2. FEMALE VAGINA & LABIA
+            if (IsFemaleGenitalName(partName) || IsFemaleGenitalName(otherLower)) {
+                if (filterVaginaJSON != null && filterVaginaJSON.val) {
+                    return true;
+                }
+            }
+
+            // 3. BREASTS & CHEST
             if (lower.Contains("breast") || lower.Contains("nipple") || lower.Contains("chest") ||
                 lower.Contains("boob") || lower.Contains("areola") || lower.Contains("pec") ||
                 otherLower.Contains("breast") || otherLower.Contains("nipple")) {
@@ -545,7 +560,7 @@ namespace MVRPlugin {
                 }
             }
 
-            // 3. MOUTH & HEAD
+            // 4. MOUTH & HEAD
             if (lower.Contains("mouth") || lower.Contains("lip") || lower.Contains("tongue") ||
                 lower.Contains("jaw") || lower.Contains("neck") || lower.Contains("face") ||
                 (lower.Contains("head") && !lower.Contains("penis")) ||
@@ -555,7 +570,7 @@ namespace MVRPlugin {
                 }
             }
 
-            // 4. GENERAL HAND & ARM TOUCH
+            // 5. GENERAL HAND & ARM TOUCH
             if (IsHandName(partName) || IsHandName(otherLower)) {
                 if (filterHandsJSON != null && filterHandsJSON.val) {
                     return true;
