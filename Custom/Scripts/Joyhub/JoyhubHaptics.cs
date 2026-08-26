@@ -103,16 +103,17 @@ namespace MVRPlugin {
 
         private List<JoyhubCollisionForwarder> activeForwarders = new List<JoyhubCollisionForwarder>();
 
-        private void CreateSectionHeader(string title, string hexColor, bool rightSide) {
+        // High-contrast clean black section headers
+        private void CreateSectionHeader(string title, bool rightSide) {
             try {
                 UIDynamic spacer = CreateSpacer(rightSide);
-                if (spacer != null) spacer.height = 12f;
+                if (spacer != null) spacer.height = 10f;
 
-                string formatted = string.Format("<b><color={0}>━━━ {1} ━━━</color></b>", hexColor, title.ToUpper());
+                string formatted = string.Format("<b><color=#000000>■  {0}  ■</color></b>", title.ToUpper());
                 JSONStorableString headerParam = new JSONStorableString(title + "_hdr", formatted);
                 UIDynamicTextField tf = CreateTextField(headerParam, rightSide);
                 if (tf != null) {
-                    tf.height = 36f;
+                    tf.height = 34f;
                 }
             } catch (Exception) { }
         }
@@ -122,12 +123,12 @@ namespace MVRPlugin {
                 SuperController.LogMessage("Joyhub Advanced Haptics Dashboard Loading...");
 
                 // ==================== LEFT COLUMN (rightSide = false) ====================
-                CreateSectionHeader("Master Plugin Control", "#33CCFF", false);
+                CreateSectionHeader("Master Plugin Control", false);
                 enabledJSON = new JSONStorableBool("Master Enabled", true);
                 RegisterBool(enabledJSON);
                 CreateToggle(enabledJSON, false);
 
-                CreateSectionHeader("Before Touch (Idle / Approach)", "#44BBFF", false);
+                CreateSectionHeader("Before Touch (Idle / Approach)", false);
                 beforeVibeJSON = new JSONStorableFloat("Before Touch: Vibe % (Idle)", 0f, 0f, 100f, true);
                 RegisterFloat(beforeVibeJSON);
                 CreateSlider(beforeVibeJSON, false);
@@ -152,7 +153,7 @@ namespace MVRPlugin {
                 RegisterBool(beforePumpJSON);
                 CreateToggle(beforePumpJSON, false);
 
-                CreateSectionHeader("Dynamics & Waveforms", "#CC77FF", false);
+                CreateSectionHeader("Dynamics & Waveforms", false);
                 pulseEnabledJSON = new JSONStorableBool("Pulse Waveform Mode (Idle)", false);
                 RegisterBool(pulseEnabledJSON);
                 CreateToggle(pulseEnabledJSON, false);
@@ -186,7 +187,7 @@ namespace MVRPlugin {
                 CreateSlider(manualVibeJSON, false);
 
                 // ==================== RIGHT COLUMN (rightSide = true) ====================
-                CreateSectionHeader("During Touch (Active Contact)", "#FF6688", true);
+                CreateSectionHeader("During Touch (Active Contact)", true);
                 duringVibeJSON = new JSONStorableFloat("During Touch: Vibe % (Ch 1)", 85f, 0f, 100f, true);
                 RegisterFloat(duringVibeJSON);
                 CreateSlider(duringVibeJSON, true);
@@ -223,7 +224,7 @@ namespace MVRPlugin {
                 RegisterBool(duringPumpJSON);
                 CreateToggle(duringPumpJSON, true);
 
-                CreateSectionHeader("Targeted Body Parts", "#FFAA33", true);
+                CreateSectionHeader("Targeted Body Parts", true);
                 filterGenitalsJSON = new JSONStorableBool("Body Part: Genitals & Pelvis", true);
                 RegisterBool(filterGenitalsJSON);
                 CreateToggle(filterGenitalsJSON, true);
@@ -244,7 +245,7 @@ namespace MVRPlugin {
                 RegisterBool(filterOtherJSON);
                 CreateToggle(filterOtherJSON, true);
 
-                CreateSectionHeader("Actions & Telemetry", "#33DD88", true);
+                CreateSectionHeader("Actions & Telemetry", true);
                 portJSON = new JSONStorableFloat("Bridge Port", 8888f, 1000f, 65535f, false);
                 RegisterFloat(portJSON);
                 CreateSlider(portJSON, true);
