@@ -41,7 +41,7 @@ namespace MVRPlugin {
             }
         }
 
-        // ==================== LEFT COLUMN: BEFORE TOUCH (IDLE) & DYNAMICS ====================
+        // ==================== LEFT COLUMN UI CONTROLS ====================
         private JSONStorableBool enabledJSON;
 
         // Before Touch (Idle) Feature Controls
@@ -62,7 +62,7 @@ namespace MVRPlugin {
         private JSONStorableFloat maxSpeedClampJSON;
         private JSONStorableFloat manualVibeJSON;
 
-        // ==================== RIGHT COLUMN: DURING TOUCH (ACTIVE) & BODY PARTS ====================
+        // ==================== RIGHT COLUMN UI CONTROLS ====================
         // During Touch Feature Controls
         private JSONStorableFloat duringVibeJSON;
         private JSONStorableFloat duringCh2JSON;
@@ -103,16 +103,32 @@ namespace MVRPlugin {
 
         private List<JoyhubCollisionForwarder> activeForwarders = new List<JoyhubCollisionForwarder>();
 
+        // Helper to create clean visual section headers with Unity Rich Text
+        private void CreateSectionHeader(string title, string hexColor, bool rightSide) {
+            try {
+                UIDynamic spacer = CreateSpacer(rightSide);
+                if (spacer != null) spacer.height = 12f;
+
+                string formatted = string.Format("<b><color={0}>━━━ {1} ━━━</color></b>", hexColor, title.ToUpper());
+                JSONStorableString headerParam = new JSONStorableString(title + "_hdr", formatted);
+                UIDynamicTextField tf = CreateTextField(headerParam, rightSide);
+                if (tf != null) {
+                    tf.height = 36f;
+                }
+            } catch (Exception) { }
+        }
+
         public override void Init() {
             try {
-                SuperController.LogMessage("Joyhub Advanced Before/During Touch Haptics Loading...");
+                SuperController.LogMessage("Joyhub Advanced Haptics Dashboard Loading...");
 
                 // ==================== LEFT COLUMN (rightSide = false) ====================
+                CreateSectionHeader("Master Plugin Control", "#33CCFF", false);
                 enabledJSON = new JSONStorableBool("Master Enabled", true);
                 RegisterBool(enabledJSON);
                 CreateToggle(enabledJSON, false);
 
-                // --- BEFORE TOUCH SECTION ---
+                CreateSectionHeader("Before Touch (Idle / Approach)", "#44BBFF", false);
                 beforeVibeJSON = new JSONStorableFloat("Before Touch: Vibe % (Idle)", 0f, 0f, 100f, true);
                 RegisterFloat(beforeVibeJSON);
                 CreateSlider(beforeVibeJSON, false);
@@ -125,11 +141,11 @@ namespace MVRPlugin {
                 RegisterBool(beforeLightJSON);
                 CreateToggle(beforeLightJSON, false);
 
-                beforeSuckJSON = new JSONStorableFloat("Before Touch: Suction Level (0-5)", 0f, 0f, 5f, true);
+                beforeSuckJSON = new JSONStorableFloat("Before Touch: Suction (0-5)", 0f, 0f, 5f, true);
                 RegisterFloat(beforeSuckJSON);
                 CreateSlider(beforeSuckJSON, false);
 
-                beforeSqueezeJSON = new JSONStorableFloat("Before Touch: Squeeze Level (0-5)", 0f, 0f, 5f, true);
+                beforeSqueezeJSON = new JSONStorableFloat("Before Touch: Squeeze (0-5)", 0f, 0f, 5f, true);
                 RegisterFloat(beforeSqueezeJSON);
                 CreateSlider(beforeSqueezeJSON, false);
 
@@ -137,7 +153,7 @@ namespace MVRPlugin {
                 RegisterBool(beforePumpJSON);
                 CreateToggle(beforePumpJSON, false);
 
-                // --- DYNAMICS & WAVEFORMS ---
+                CreateSectionHeader("Dynamics & Waveforms", "#CC77FF", false);
                 pulseEnabledJSON = new JSONStorableBool("Pulse Waveform Mode (Idle)", false);
                 RegisterBool(pulseEnabledJSON);
                 CreateToggle(pulseEnabledJSON, false);
@@ -171,6 +187,7 @@ namespace MVRPlugin {
                 CreateSlider(manualVibeJSON, false);
 
                 // ==================== RIGHT COLUMN (rightSide = true) ====================
+                CreateSectionHeader("During Touch (Active Contact)", "#FF6688", true);
                 duringVibeJSON = new JSONStorableFloat("During Touch: Vibe % (Ch 1)", 85f, 0f, 100f, true);
                 RegisterFloat(duringVibeJSON);
                 CreateSlider(duringVibeJSON, true);
@@ -195,11 +212,11 @@ namespace MVRPlugin {
                 RegisterBool(duringLightJSON);
                 CreateToggle(duringLightJSON, true);
 
-                duringSuckJSON = new JSONStorableFloat("During Touch: Suction Level (0-5)", 3f, 0f, 5f, true);
+                duringSuckJSON = new JSONStorableFloat("During Touch: Suction (0-5)", 3f, 0f, 5f, true);
                 RegisterFloat(duringSuckJSON);
                 CreateSlider(duringSuckJSON, true);
 
-                duringSqueezeJSON = new JSONStorableFloat("During Touch: Squeeze Level (0-5)", 2f, 0f, 5f, true);
+                duringSqueezeJSON = new JSONStorableFloat("During Touch: Squeeze (0-5)", 2f, 0f, 5f, true);
                 RegisterFloat(duringSqueezeJSON);
                 CreateSlider(duringSqueezeJSON, true);
 
@@ -207,7 +224,7 @@ namespace MVRPlugin {
                 RegisterBool(duringPumpJSON);
                 CreateToggle(duringPumpJSON, true);
 
-                // --- BODY PART FILTERS ---
+                CreateSectionHeader("Targeted Body Parts", "#FFAA33", true);
                 filterGenitalsJSON = new JSONStorableBool("Body Part: Genitals & Pelvis", true);
                 RegisterBool(filterGenitalsJSON);
                 CreateToggle(filterGenitalsJSON, true);
@@ -228,23 +245,23 @@ namespace MVRPlugin {
                 RegisterBool(filterOtherJSON);
                 CreateToggle(filterOtherJSON, true);
 
+                CreateSectionHeader("Actions & Telemetry", "#33DD88", true);
                 portJSON = new JSONStorableFloat("Bridge Port", 8888f, 1000f, 65535f, false);
                 RegisterFloat(portJSON);
                 CreateSlider(portJSON, true);
 
-                // Actions & Buttons
                 burstAction = new JSONStorableAction("TriggerBurst", TriggerBurstAction);
                 RegisterAction(burstAction);
 
                 stopAction = new JSONStorableAction("StopAll", StopAllAction);
                 RegisterAction(stopAction);
 
-                UIDynamicButton burstBtn = CreateButton("Test Trigger Burst (100%)", true);
+                UIDynamicButton burstBtn = CreateButton("⚡ Test Trigger Burst (100%)", true);
                 if (burstBtn != null && burstBtn.button != null) {
                     burstBtn.button.onClick.AddListener(TriggerBurstAction);
                 }
 
-                UIDynamicButton stopBtn = CreateButton("STOP ALL MOTORS & FEATURES", true);
+                UIDynamicButton stopBtn = CreateButton("🛑 STOP ALL MOTORS & FEATURES", true);
                 if (stopBtn != null && stopBtn.button != null) {
                     stopBtn.button.onClick.AddListener(StopAllAction);
                 }
