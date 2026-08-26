@@ -306,7 +306,7 @@ namespace MVRPlugin {
                 RegisterBool(filterPenisJSON);
                 CreateToggle(filterPenisJSON, true);
 
-                filterVaginaJSON = new JSONStorableBool("Body Part: Female Vagina & Labia", true);
+                filterVaginaJSON = new JSONStorableBool("Body Part: Female Vagina & Labia", false);
                 RegisterBool(filterVaginaJSON);
                 CreateToggle(filterVaginaJSON, true);
 
