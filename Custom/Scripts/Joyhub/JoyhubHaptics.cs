@@ -43,6 +43,7 @@ namespace MVRPlugin {
 
         // ==================== LEFT COLUMN UI CONTROLS ====================
         private JSONStorableBool enabledJSON;
+        private JSONStorableStringChooser personSelectorJSON;
 
         // Before Touch (Idle) Feature Controls
         private JSONStorableFloat beforeVibeJSON;
@@ -52,7 +53,9 @@ namespace MVRPlugin {
         private JSONStorableFloat beforeSqueezeJSON;
         private JSONStorableBool beforePumpJSON;
 
-        // Dynamics & Waveforms
+        // Dynamics, Impact Hardness & Waveforms
+        private JSONStorableBool enableImpactForceJSON;
+        private JSONStorableFloat impactSensitivityJSON;
         private JSONStorableBool pulseEnabledJSON;
         private JSONStorableFloat pulseMinJSON;
         private JSONStorableFloat pulseMaxJSON;
@@ -92,6 +95,7 @@ namespace MVRPlugin {
         private string host = "127.0.0.1";
         private int currentPort = 8888;
 
+        private Atom activeTargetAtom;
         private Vector3 lastPosition;
         private float lastSendTime = 0f;
         private float sendInterval = 0.04f; // 25 Hz updates
@@ -104,7 +108,6 @@ namespace MVRPlugin {
 
         private List<JoyhubCollisionForwarder> activeForwarders = new List<JoyhubCollisionForwarder>();
 
-        // High-contrast clean black section headers
         private void CreateSectionHeader(string title, bool rightSide) {
             try {
                 UIDynamic spacer = CreateSpacer(rightSide);
@@ -119,15 +122,45 @@ namespace MVRPlugin {
             } catch (Exception) { }
         }
 
+        private List<string> GetScenePersonNames() {
+            List<string> list = new List<string>();
+            try {
+                List<Atom> atoms = SuperController.singleton.GetAtoms();
+                if (atoms != null) {
+                    foreach (Atom a in atoms) {
+                        if (a != null && a.type == "Person") {
+                            list.Add(a.name);
+                        }
+                    }
+                }
+            } catch (Exception) { }
+            if (list.Count == 0 && containingAtom != null) {
+                list.Add(containingAtom.name);
+            }
+            return list;
+        }
+
         public override void Init() {
             try {
-                SuperController.LogMessage("Joyhub Advanced Haptics Dashboard Loading...");
+                SuperController.LogMessage("Joyhub Advanced Haptics (Session & Atom Mode) Loading...");
 
                 // ==================== LEFT COLUMN (rightSide = false) ====================
                 CreateSectionHeader("Master Plugin Control", false);
                 enabledJSON = new JSONStorableBool("Master Enabled", true);
                 RegisterBool(enabledJSON);
                 CreateToggle(enabledJSON, false);
+
+                // Target Person Selector (Enables full Session Plugin mode!)
+                List<string> persons = GetScenePersonNames();
+                string defaultPerson = (containingAtom != null && containingAtom.type == "Person") ? containingAtom.name : (persons.Count > 0 ? persons[0] : "None");
+                personSelectorJSON = new JSONStorableStringChooser("Target Person Atom", persons, defaultPerson, "Target Person", OnPersonSelected);
+                RegisterStringChooser(personSelectorJSON);
+                CreatePopup(personSelectorJSON, false);
+
+                UIDynamicButton refreshAtomsBtn = CreateButton("🔄 Refresh Scene Characters", false);
+                if (refreshAtomsBtn != null && refreshAtomsBtn.button != null) {
+                    refreshAtomsBtn.button.onClick.AddListener(RefreshPersonList);
+                }
 
                 CreateSectionHeader("Before Touch (Idle / Approach)", false);
                 beforeVibeJSON = new JSONStorableFloat("Before Touch: Vibe % (Idle)", 0f, 0f, 100f, true);
@@ -154,7 +187,15 @@ namespace MVRPlugin {
                 RegisterBool(beforePumpJSON);
                 CreateToggle(beforePumpJSON, false);
 
-                CreateSectionHeader("Dynamics & Waveforms", false);
+                CreateSectionHeader("Dynamics, Hardness & Waveforms", false);
+                enableImpactForceJSON = new JSONStorableBool("Dynamic Touch Hardness Boost", true);
+                RegisterBool(enableImpactForceJSON);
+                CreateToggle(enableImpactForceJSON, false);
+
+                impactSensitivityJSON = new JSONStorableFloat("Touch Hardness Sensitivity %", 50f, 0f, 100f, true);
+                RegisterFloat(impactSensitivityJSON);
+                CreateSlider(impactSensitivityJSON, false);
+
                 pulseEnabledJSON = new JSONStorableBool("Pulse Waveform Mode (Idle)", false);
                 RegisterBool(pulseEnabledJSON);
                 CreateToggle(pulseEnabledJSON, false);
@@ -275,18 +316,60 @@ namespace MVRPlugin {
                 CreateTextField(statusJSON, true);
 
                 InitUDP((int)portJSON.val);
-                SetupBodyPartForwarders();
+                BindToTargetAtom(defaultPerson);
             }
             catch (Exception ex) {
                 SuperController.LogError("JoyhubHaptics Init Error: " + ex);
             }
         }
 
-        private void SetupBodyPartForwarders() {
-            try {
-                if (containingAtom == null) return;
+        private void OnPersonSelected(string personName) {
+            BindToTargetAtom(personName);
+        }
 
-                Rigidbody[] rbs = containingAtom.GetComponentsInChildren<Rigidbody>(true);
+        private void RefreshPersonList() {
+            try {
+                List<string> persons = GetScenePersonNames();
+                if (personSelectorJSON != null) {
+                    personSelectorJSON.choices = persons;
+                    if (!persons.Contains(personSelectorJSON.val) && persons.Count > 0) {
+                        personSelectorJSON.val = persons[0];
+                    }
+                }
+            } catch (Exception ex) {
+                SuperController.LogError("RefreshPersonList Error: " + ex);
+            }
+        }
+
+        private void BindToTargetAtom(string personName) {
+            try {
+                CleanupForwarders();
+
+                Atom target = null;
+                if (!string.IsNullOrEmpty(personName) && personName != "None") {
+                    target = SuperController.singleton.GetAtomByUid(personName);
+                }
+                if (target == null) {
+                    target = containingAtom;
+                }
+
+                activeTargetAtom = target;
+                if (activeTargetAtom != null) {
+                    lastPosition = activeTargetAtom.transform.position;
+                    SetupBodyPartForwarders(activeTargetAtom);
+                    SuperController.LogMessage(string.Format("JoyhubHaptics: Bound sensors to Atom '{0}' ({1} colliders)", activeTargetAtom.name, activeForwarders.Count));
+                }
+            }
+            catch (Exception ex) {
+                SuperController.LogError("BindToTargetAtom Error: " + ex);
+            }
+        }
+
+        private void SetupBodyPartForwarders(Atom target) {
+            try {
+                if (target == null) return;
+
+                Rigidbody[] rbs = target.GetComponentsInChildren<Rigidbody>(true);
                 foreach (Rigidbody rb in rbs) {
                     if (rb == null || rb.gameObject == null) continue;
 
@@ -298,11 +381,21 @@ namespace MVRPlugin {
                     fwd.bodyPartName = rb.gameObject.name;
                     activeForwarders.Add(fwd);
                 }
-                SuperController.LogMessage(string.Format("JoyhubHaptics: Mapped {0} body part colliders", activeForwarders.Count));
             }
             catch (Exception ex) {
                 SuperController.LogError("SetupBodyPartForwarders Error: " + ex);
             }
+        }
+
+        private void CleanupForwarders() {
+            try {
+                foreach (var fwd in activeForwarders) {
+                    if (fwd != null) {
+                        Destroy(fwd);
+                    }
+                }
+                activeForwarders.Clear();
+            } catch (Exception) { }
         }
 
         private bool IsBodyPartEnabled(string partName) {
@@ -336,9 +429,10 @@ namespace MVRPlugin {
             if (enabledJSON == null || !enabledJSON.val) return;
             if (!IsBodyPartEnabled(partName)) return;
 
-            // IGNORE SELF-COLLISIONS: Skip if colliding object belongs to the same Person atom
-            if (collision != null && collision.collider != null && containingAtom != null) {
-                if (collision.collider.transform.IsChildOf(containingAtom.transform)) {
+            // IGNORE SELF-COLLISIONS: Skip if colliding object belongs to the target character
+            Atom target = activeTargetAtom ?? containingAtom;
+            if (collision != null && collision.collider != null && target != null) {
+                if (collision.collider.transform.IsChildOf(target.transform)) {
                     return;
                 }
             }
@@ -351,9 +445,10 @@ namespace MVRPlugin {
             if (enabledJSON == null || !enabledJSON.val) return;
             if (!IsBodyPartEnabled(partName)) return;
 
-            // IGNORE SELF-TRIGGERS: Skip if trigger overlap belongs to the same Person atom
-            if (other != null && containingAtom != null) {
-                if (other.transform.IsChildOf(containingAtom.transform)) {
+            // IGNORE SELF-TRIGGERS: Skip if trigger overlap belongs to the target character
+            Atom target = activeTargetAtom ?? containingAtom;
+            if (other != null && target != null) {
+                if (other.transform.IsChildOf(target.transform)) {
                     return;
                 }
             }
@@ -366,9 +461,14 @@ namespace MVRPlugin {
             lastTouchTime = Time.time;
             lastTouchedPart = partName;
 
-            float impactBonus = Mathf.Clamp((relativeVelocity - 0.5f) * 10f, 0f, 20f);
-            float targetValue = (duringVibeJSON != null ? duringVibeJSON.val : 85f) + impactBonus;
+            // Dynamic Hardness & Impact Force Calculation
+            float impactBonus = 0f;
+            if (enableImpactForceJSON != null && enableImpactForceJSON.val) {
+                float sensMultiplier = (impactSensitivityJSON != null ? impactSensitivityJSON.val : 50f) / 50f;
+                impactBonus = Mathf.Clamp((relativeVelocity - 0.3f) * 15f * sensMultiplier, 0f, 35f);
+            }
 
+            float targetValue = (duringVibeJSON != null ? duringVibeJSON.val : 85f) + impactBonus;
             touchIntensity = Mathf.Max(touchIntensity, Mathf.Clamp(targetValue, 0f, 100f));
         }
 
@@ -398,8 +498,9 @@ namespace MVRPlugin {
         }
 
         void Start() {
-            if (containingAtom != null) {
-                lastPosition = containingAtom.transform.position;
+            Atom target = activeTargetAtom ?? containingAtom;
+            if (target != null) {
+                lastPosition = target.transform.position;
             }
         }
 
@@ -472,8 +573,9 @@ namespace MVRPlugin {
 
                     // Motion Velocity Tracking
                     float velocityIntensity = 0f;
-                    if (containingAtom != null && motionSensitivityJSON != null && motionSensitivityJSON.val > 0f) {
-                        Vector3 currentPos = containingAtom.transform.position;
+                    Atom target = activeTargetAtom ?? containingAtom;
+                    if (target != null && motionSensitivityJSON != null && motionSensitivityJSON.val > 0f) {
+                        Vector3 currentPos = target.transform.position;
                         float speed = (currentPos - lastPosition).magnitude / Mathf.Max(0.0001f, Time.deltaTime);
                         lastPosition = currentPos;
                         velocityIntensity = speed * motionSensitivityJSON.val * 15f;
@@ -559,8 +661,10 @@ namespace MVRPlugin {
                         stateStr = "[BEFORE TOUCH (IDLE)]";
                     }
 
-                    statusJSON.val = string.Format("{0} -> Vibe:{1}% | H:{2} L:{3} S:{4} | Port {5}",
+                    string atomName = activeTargetAtom != null ? activeTargetAtom.name : "None";
+                    statusJSON.val = string.Format("{0} [{1}] -> Vibe:{2}% | H:{3} L:{4} S:{5} | Port {6}",
                         stateStr,
+                        atomName,
                         m1,
                         activeHeat ? "ON" : "OFF",
                         activeLight ? "ON" : "OFF",
@@ -586,12 +690,7 @@ namespace MVRPlugin {
 
         void OnDestroy() {
             try {
-                foreach (var fwd in activeForwarders) {
-                    if (fwd != null) {
-                        Destroy(fwd);
-                    }
-                }
-                activeForwarders.Clear();
+                CleanupForwarders();
 
                 if (udpClient != null) {
                     SendRawPacket("STOP");
