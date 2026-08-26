@@ -90,6 +90,7 @@ namespace MVRPlugin {
         private JSONStorableStringChooser allowedTouchingAtomJSON;
         private JSONStorableBool sourcePersonsJSON;
         private JSONStorableBool sourceToysJSON;
+        private JSONStorableBool sourceCustomObjectsJSON;
         private JSONStorableBool ignoreSelfTouchJSON;
         private JSONStorableBool ignoreClothingHairJSON;
         private JSONStorableBool ignoreEnvironmentJSON;
@@ -170,7 +171,7 @@ namespace MVRPlugin {
 
         public override void Init() {
             try {
-                SuperController.LogMessage("Joyhub Advanced Haptics (Auto Gender Adaptation) Loading...");
+                SuperController.LogMessage("Joyhub Advanced Haptics (Dedicated Toys & Objects) Loading...");
 
                 // ==================== LEFT COLUMN (rightSide = false) ====================
                 CreateSectionHeader("Master Plugin Control", false);
@@ -340,9 +341,13 @@ namespace MVRPlugin {
                 RegisterBool(sourcePersonsJSON);
                 CreateToggle(sourcePersonsJSON, true);
 
-                sourceToysJSON = new JSONStorableBool("Allow: Toys & Custom Objects", false);
+                sourceToysJSON = new JSONStorableBool("Allow: Toys & Dildos", true);
                 RegisterBool(sourceToysJSON);
                 CreateToggle(sourceToysJSON, true);
+
+                sourceCustomObjectsJSON = new JSONStorableBool("Allow: General Props & Custom Objects", false);
+                RegisterBool(sourceCustomObjectsJSON);
+                CreateToggle(sourceCustomObjectsJSON, true);
 
                 ignoreSelfTouchJSON = new JSONStorableBool("Ignore: Self-Collisions (Own Body)", true);
                 RegisterBool(ignoreSelfTouchJSON);
@@ -566,6 +571,16 @@ namespace MVRPlugin {
                    lower.Contains("pinky") || lower.Contains("palm");
         }
 
+        private bool IsToyName(string name) {
+            if (string.IsNullOrEmpty(name)) return false;
+            string lower = name.ToLower();
+            return lower.Contains("dildo") || lower.Contains("toy") || lower.Contains("plug") ||
+                   lower.Contains("vibe") || lower.Contains("vibrat") || lower.Contains("fleshlight") ||
+                   lower.Contains("stroker") || lower.Contains("egg") || lower.Contains("wand") ||
+                   lower.Contains("strap") || lower.Contains("penetrat") || lower.Contains("bead") ||
+                   lower.Contains("bullet") || lower.Contains("masturbat");
+        }
+
         private bool IsBodyPartEnabled(string partName, GameObject otherObj) {
             string lower = (partName != null) ? partName.ToLower() : "";
             string otherLower = (otherObj != null) ? otherObj.name.ToLower() : "";
@@ -685,11 +700,15 @@ namespace MVRPlugin {
                 }
             }
 
+            // Differentiate Person vs. Toy vs. General Custom Object
             if (atomType == "Person") {
                 if (sourcePersonsJSON != null && !sourcePersonsJSON.val) return false;
             }
-            else {
+            else if (IsToyName(atomNameLower) || IsToyName(objNameLower)) {
                 if (sourceToysJSON != null && !sourceToysJSON.val) return false;
+            }
+            else {
+                if (sourceCustomObjectsJSON != null && !sourceCustomObjectsJSON.val) return false;
             }
 
             return true;
