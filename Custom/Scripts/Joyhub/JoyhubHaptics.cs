@@ -11,7 +11,7 @@ namespace MVRPlugin {
     // Main MVRScript class MUST be first in file for VaM dynamic compiler
     public class JoyhubHaptics : MVRScript {
 
-        // Helper forwarder attached to specific body part rigidbodies
+        // Helper forwarder attached to specific body part rigidbodies and colliders
         public class JoyhubCollisionForwarder : MonoBehaviour {
             public JoyhubHaptics parentPlugin;
             public string bodyPartName = "";
@@ -168,7 +168,7 @@ namespace MVRPlugin {
 
         public override void Init() {
             try {
-                SuperController.LogMessage("Joyhub Advanced Haptics (Scrollable Dropdowns) Loading...");
+                SuperController.LogMessage("Joyhub Advanced Haptics (Complete Glans & Genitals Mapping) Loading...");
 
                 // ==================== LEFT COLUMN (rightSide = false) ====================
                 CreateSectionHeader("Master Plugin Control", false);
@@ -181,7 +181,6 @@ namespace MVRPlugin {
                 personSelectorJSON = new JSONStorableStringChooser("Target Person Atom", persons, defaultPerson, "Target Person", OnPersonSelected);
                 RegisterStringChooser(personSelectorJSON);
                 
-                // Proper Scrollable Popup with Navigation Stepper Arrows
                 UIDynamicPopup personPopup = CreateScrollablePopup(personSelectorJSON, false);
                 if (personPopup != null) {
                     personPopup.popupPanelHeight = 320f;
@@ -333,7 +332,6 @@ namespace MVRPlugin {
                 allowedTouchingAtomJSON = new JSONStorableStringChooser("Allowed Touching Atom", allAtoms, "Any Allowed Atom", "Allowed Atom");
                 RegisterStringChooser(allowedTouchingAtomJSON);
                 
-                // Proper Scrollable Popup with Navigation Stepper Arrows
                 UIDynamicPopup touchingPopup = CreateScrollablePopup(allowedTouchingAtomJSON, true);
                 if (touchingPopup != null) {
                     touchingPopup.popupPanelHeight = 320f;
@@ -432,7 +430,7 @@ namespace MVRPlugin {
                 if (activeTargetAtom != null) {
                     lastPosition = activeTargetAtom.transform.position;
                     SetupBodyPartForwarders(activeTargetAtom);
-                    SuperController.LogMessage(string.Format("JoyhubHaptics: Bound sensors to Atom '{0}' ({1} colliders)", activeTargetAtom.name, activeForwarders.Count));
+                    SuperController.LogMessage(string.Format("JoyhubHaptics: Bound sensors to Atom '{0}' ({1} colliders/triggers)", activeTargetAtom.name, activeForwarders.Count));
                 }
             }
             catch (Exception ex) {
@@ -444,6 +442,21 @@ namespace MVRPlugin {
             try {
                 if (target == null) return;
 
+                // 1. Attach forwarders to ALL child Colliders and Triggers (including glans/tip triggers that lack rigidbodies)
+                Collider[] colliders = target.GetComponentsInChildren<Collider>(true);
+                foreach (Collider col in colliders) {
+                    if (col == null || col.gameObject == null) continue;
+
+                    JoyhubCollisionForwarder fwd = col.gameObject.GetComponent<JoyhubCollisionForwarder>();
+                    if (fwd == null) {
+                        fwd = col.gameObject.AddComponent<JoyhubCollisionForwarder>();
+                    }
+                    fwd.parentPlugin = this;
+                    fwd.bodyPartName = col.gameObject.name;
+                    activeForwarders.Add(fwd);
+                }
+
+                // 2. Also cover any Rigidbodies directly
                 Rigidbody[] rbs = target.GetComponentsInChildren<Rigidbody>(true);
                 foreach (Rigidbody rb in rbs) {
                     if (rb == null || rb.gameObject == null) continue;
@@ -451,10 +464,10 @@ namespace MVRPlugin {
                     JoyhubCollisionForwarder fwd = rb.gameObject.GetComponent<JoyhubCollisionForwarder>();
                     if (fwd == null) {
                         fwd = rb.gameObject.AddComponent<JoyhubCollisionForwarder>();
+                        fwd.parentPlugin = this;
+                        fwd.bodyPartName = rb.gameObject.name;
+                        activeForwarders.Add(fwd);
                     }
-                    fwd.parentPlugin = this;
-                    fwd.bodyPartName = rb.gameObject.name;
-                    activeForwarders.Add(fwd);
                 }
             }
             catch (Exception ex) {
@@ -477,23 +490,41 @@ namespace MVRPlugin {
             if (string.IsNullOrEmpty(partName)) return true;
             string lower = partName.ToLower();
 
+            // Genitals & Pelvis (Comprehensive mapping for male glans, tip, shaft, testes + female triggers)
             if (lower.Contains("pelvis") || lower.Contains("labia") || lower.Contains("vagina") ||
                 lower.Contains("penis") || lower.Contains("testes") || lower.Contains("anus") ||
-                lower.Contains("glute") || lower.Contains("genital")) {
+                lower.Contains("glute") || lower.Contains("genital") || lower.Contains("glans") ||
+                lower.Contains("gland") || lower.Contains("shaft") || lower.Contains("scrotum") ||
+                lower.Contains("clit") || lower.Contains("urethra") || lower.Contains("cervix") ||
+                lower.Contains("gspot") || lower.Contains("foreskin") || lower.Contains("tip") ||
+                lower.Contains("groin") || lower.Contains("crotch") || lower.Contains("head")) {
+                // If it contains head, check if it's head of penis (e.g. penisHead, glansHead) vs face head
+                if (lower == "head" || lower.Contains("headcontrol") || lower.Contains("face")) {
+                    return (filterMouthJSON != null && filterMouthJSON.val);
+                }
                 return (filterGenitalsJSON != null && filterGenitalsJSON.val);
             }
 
-            if (lower.Contains("breast") || lower.Contains("nipple") || lower.Contains("chest")) {
+            // Breasts & Chest
+            if (lower.Contains("breast") || lower.Contains("nipple") || lower.Contains("chest") ||
+                lower.Contains("boob") || lower.Contains("areola") || lower.Contains("pec")) {
                 return (filterBreastsJSON != null && filterBreastsJSON.val);
             }
 
+            // Mouth & Head
             if (lower.Contains("head") || lower.Contains("mouth") || lower.Contains("lip") ||
-                lower.Contains("tongue") || lower.Contains("jaw") || lower.Contains("neck") || lower.Contains("face")) {
+                lower.Contains("tongue") || lower.Contains("jaw") || lower.Contains("neck") ||
+                lower.Contains("face") || lower.Contains("chin") || lower.Contains("cheek") ||
+                lower.Contains("throat")) {
                 return (filterMouthJSON != null && filterMouthJSON.val);
             }
 
+            // Hands & Arms
             if (lower.Contains("hand") || lower.Contains("finger") || lower.Contains("forearm") ||
-                lower.Contains("arm") || lower.Contains("wrist")) {
+                lower.Contains("arm") || lower.Contains("wrist") || lower.Contains("thumb") ||
+                lower.Contains("index") || lower.Contains("mid") || lower.Contains("ring") ||
+                lower.Contains("pinky") || lower.Contains("palm") || lower.Contains("bicep") ||
+                lower.Contains("elbow")) {
                 return (filterHandsJSON != null && filterHandsJSON.val);
             }
 
