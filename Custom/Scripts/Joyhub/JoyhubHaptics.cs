@@ -170,7 +170,7 @@ namespace MVRPlugin {
 
         public override void Init() {
             try {
-                SuperController.LogMessage("Joyhub Advanced Haptics (Dedicated Anatomy Filters) Loading...");
+                SuperController.LogMessage("Joyhub Advanced Haptics (Auto Gender Adaptation) Loading...");
 
                 // ==================== LEFT COLUMN (rightSide = false) ====================
                 CreateSectionHeader("Master Plugin Control", false);
@@ -414,6 +414,38 @@ namespace MVRPlugin {
             }
         }
 
+        private void AutoConfigureGenderFilters(Atom target) {
+            if (target == null) return;
+            try {
+                bool isMale = false;
+                DAZCharacterSelector charSelector = target.GetComponentInChildren<DAZCharacterSelector>();
+                if (charSelector != null) {
+                    isMale = (charSelector.gender == DAZCharacterSelector.Gender.Male);
+                }
+                else {
+                    // Anatomy fallback check
+                    foreach (Collider c in target.GetComponentsInChildren<Collider>(true)) {
+                        if (c != null && (c.name.ToLower().Contains("penis") || c.name.ToLower().Contains("autocollidergen"))) {
+                            isMale = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (isMale) {
+                    if (filterPenisJSON != null) filterPenisJSON.val = true;
+                    if (filterVaginaJSON != null) filterVaginaJSON.val = false;
+                }
+                else {
+                    if (filterPenisJSON != null) filterPenisJSON.val = false;
+                    if (filterVaginaJSON != null) filterVaginaJSON.val = true;
+                }
+            }
+            catch (Exception ex) {
+                SuperController.LogError("AutoConfigureGenderFilters Error: " + ex);
+            }
+        }
+
         private void BindToTargetAtom(string personName) {
             try {
                 CleanupForwarders();
@@ -430,6 +462,7 @@ namespace MVRPlugin {
                 if (activeTargetAtom != null) {
                     lastPosition = activeTargetAtom.transform.position;
                     SetupBodyPartForwarders(activeTargetAtom);
+                    AutoConfigureGenderFilters(activeTargetAtom);
                     SuperController.LogMessage(string.Format("JoyhubHaptics: Bound sensors to Atom '{0}' ({1} colliders/triggers)", activeTargetAtom.name, myTargetColliders.Count));
                 }
             }
