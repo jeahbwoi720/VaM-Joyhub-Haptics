@@ -335,7 +335,7 @@ namespace MVRPlugin {
                 RegisterBool(sourcePersonsJSON);
                 CreateToggle(sourcePersonsJSON, true);
 
-                sourceToysJSON = new JSONStorableBool("Allow: Toys & Custom Objects", true);
+                sourceToysJSON = new JSONStorableBool("Allow: Toys & Custom Objects", false);
                 RegisterBool(sourceToysJSON);
                 CreateToggle(sourceToysJSON, true);
 
