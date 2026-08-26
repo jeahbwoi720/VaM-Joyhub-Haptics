@@ -56,6 +56,7 @@ namespace MVRPlugin {
         // Dynamics, Hardness & Waveforms
         private JSONStorableBool enableImpactForceJSON;
         private JSONStorableFloat impactSensitivityJSON;
+        private JSONStorableFloat minForceThresholdJSON;
         private JSONStorableBool pulseEnabledJSON;
         private JSONStorableFloat pulseMinJSON;
         private JSONStorableFloat pulseMaxJSON;
@@ -78,12 +79,19 @@ namespace MVRPlugin {
         private JSONStorableFloat duringSqueezeJSON;
         private JSONStorableBool duringPumpJSON;
 
-        // Body Part Filters
+        // Body Part Filters (What gets touched)
         private JSONStorableBool filterGenitalsJSON;
         private JSONStorableBool filterBreastsJSON;
         private JSONStorableBool filterMouthJSON;
         private JSONStorableBool filterHandsJSON;
         private JSONStorableBool filterOtherJSON;
+
+        // Touch Source Filters (What is allowed to touch)
+        private JSONStorableStringChooser allowedTouchingAtomJSON;
+        private JSONStorableBool sourcePersonsJSON;
+        private JSONStorableBool sourceToysJSON;
+        private JSONStorableBool ignoreClothingHairJSON;
+        private JSONStorableBool ignoreEnvironmentJSON;
 
         // Network & Actions
         private JSONStorableFloat portJSON;
@@ -103,6 +111,7 @@ namespace MVRPlugin {
         private bool isTouching = false;
         private float lastTouchTime = 0f;
         private string lastTouchedPart = "None";
+        private string lastTouchingSource = "None";
         private float currentImpactBonus = 0f;
         private float releaseFadeIntensity = 0f;
         private float burstIntensity = 0f;
@@ -142,9 +151,24 @@ namespace MVRPlugin {
             return list;
         }
 
+        private List<string> GetAllSceneAtomNames() {
+            List<string> list = new List<string> { "Any Allowed Atom" };
+            try {
+                List<Atom> atoms = SuperController.singleton.GetAtoms();
+                if (atoms != null) {
+                    foreach (Atom a in atoms) {
+                        if (a != null) {
+                            list.Add(a.name);
+                        }
+                    }
+                }
+            } catch (Exception) { }
+            return list;
+        }
+
         public override void Init() {
             try {
-                SuperController.LogMessage("Joyhub Advanced Haptics (Reactive Real-time) Loading...");
+                SuperController.LogMessage("Joyhub Advanced Haptics (Source Filtering) Loading...");
 
                 // ==================== LEFT COLUMN (rightSide = false) ====================
                 CreateSectionHeader("Master Plugin Control", false);
@@ -196,6 +220,10 @@ namespace MVRPlugin {
                 impactSensitivityJSON = new JSONStorableFloat("Touch Hardness Sensitivity %", 50f, 0f, 100f, true);
                 RegisterFloat(impactSensitivityJSON);
                 CreateSlider(impactSensitivityJSON, false);
+
+                minForceThresholdJSON = new JSONStorableFloat("Min Collision Force Threshold", 0.05f, 0.0f, 1.0f, true);
+                RegisterFloat(minForceThresholdJSON);
+                CreateSlider(minForceThresholdJSON, false);
 
                 pulseEnabledJSON = new JSONStorableBool("Pulse Waveform Mode (Idle)", false);
                 RegisterBool(pulseEnabledJSON);
@@ -292,6 +320,28 @@ namespace MVRPlugin {
                 RegisterBool(filterOtherJSON);
                 CreateToggle(filterOtherJSON, true);
 
+                CreateSectionHeader("Touch Source & Collider Filters", true);
+                List<string> allAtoms = GetAllSceneAtomNames();
+                allowedTouchingAtomJSON = new JSONStorableStringChooser("Allowed Touching Atom", allAtoms, "Any Allowed Atom", "Allowed Atom");
+                RegisterStringChooser(allowedTouchingAtomJSON);
+                CreatePopup(allowedTouchingAtomJSON, true);
+
+                sourcePersonsJSON = new JSONStorableBool("Allow: Other Characters (Persons)", true);
+                RegisterBool(sourcePersonsJSON);
+                CreateToggle(sourcePersonsJSON, true);
+
+                sourceToysJSON = new JSONStorableBool("Allow: Toys & Custom Objects", true);
+                RegisterBool(sourceToysJSON);
+                CreateToggle(sourceToysJSON, true);
+
+                ignoreClothingHairJSON = new JSONStorableBool("Ignore: Clothing & Hair Collisions", true);
+                RegisterBool(ignoreClothingHairJSON);
+                CreateToggle(ignoreClothingHairJSON, true);
+
+                ignoreEnvironmentJSON = new JSONStorableBool("Ignore: Floor & Furniture Collisions", true);
+                RegisterBool(ignoreEnvironmentJSON);
+                CreateToggle(ignoreEnvironmentJSON, true);
+
                 CreateSectionHeader("Actions & Telemetry", true);
                 portJSON = new JSONStorableFloat("Bridge Port", 8888f, 1000f, 65535f, false);
                 RegisterFloat(portJSON);
@@ -335,6 +385,14 @@ namespace MVRPlugin {
                     personSelectorJSON.choices = persons;
                     if (!persons.Contains(personSelectorJSON.val) && persons.Count > 0) {
                         personSelectorJSON.val = persons[0];
+                    }
+                }
+
+                List<string> allAtoms = GetAllSceneAtomNames();
+                if (allowedTouchingAtomJSON != null) {
+                    allowedTouchingAtomJSON.choices = allAtoms;
+                    if (!allAtoms.Contains(allowedTouchingAtomJSON.val)) {
+                        allowedTouchingAtomJSON.val = "Any Allowed Atom";
                     }
                 }
             } catch (Exception ex) {
@@ -426,39 +484,104 @@ namespace MVRPlugin {
             return (filterOtherJSON != null && filterOtherJSON.val);
         }
 
-        public void HandleCollision(string partName, Collision collision) {
-            if (enabledJSON == null || !enabledJSON.val) return;
-            if (!IsBodyPartEnabled(partName)) return;
+        // Validate whether the incoming touching object is permitted to trigger haptics
+        private bool IsTouchingSourceAllowed(GameObject otherObj, out string sourceName) {
+            sourceName = "Unknown";
+            if (otherObj == null) return false;
 
             Atom target = activeTargetAtom ?? containingAtom;
-            if (collision != null && collision.collider != null && target != null) {
-                if (collision.collider.transform.IsChildOf(target.transform)) {
-                    return;
+            if (target != null && otherObj.transform.IsChildOf(target.transform)) {
+                return false; // Skip self-collisions
+            }
+
+            // Find parent Atom of colliding object
+            Atom incomingAtom = otherObj.GetComponentInParent<Atom>();
+            string atomName = (incomingAtom != null) ? incomingAtom.name : otherObj.name;
+            string atomType = (incomingAtom != null) ? incomingAtom.type : "Object";
+            sourceName = atomName;
+
+            // Check Specific Allowed Atom filter
+            if (allowedTouchingAtomJSON != null && allowedTouchingAtomJSON.val != "Any Allowed Atom") {
+                if (atomName != allowedTouchingAtomJSON.val) {
+                    return false;
                 }
             }
 
-            float relVel = (collision != null) ? collision.relativeVelocity.magnitude : 1.0f;
-            RegisterActiveTouch(partName, relVel);
+            string objNameLower = otherObj.name.ToLower();
+            string atomNameLower = atomName.ToLower();
+
+            // Ignore Clothing and Hair Collisions
+            if (ignoreClothingHairJSON != null && ignoreClothingHairJSON.val) {
+                if (atomType == "Clothing" || atomType == "Hair" ||
+                    objNameLower.Contains("cloth") || objNameLower.Contains("hair") ||
+                    objNameLower.Contains("pant") || objNameLower.Contains("skirt") ||
+                    objNameLower.Contains("bra") || objNameLower.Contains("dress") ||
+                    objNameLower.Contains("shoe") || objNameLower.Contains("heel") ||
+                    objNameLower.Contains("underwear") || objNameLower.Contains("strap") ||
+                    atomNameLower.Contains("cloth") || atomNameLower.Contains("hair")) {
+                    return false;
+                }
+            }
+
+            // Ignore Environment and Furniture (Floors, Chairs, Beds, Cushions)
+            if (ignoreEnvironmentJSON != null && ignoreEnvironmentJSON.val) {
+                if (objNameLower.Contains("floor") || objNameLower.Contains("bed") ||
+                    objNameLower.Contains("chair") || objNameLower.Contains("cushion") ||
+                    objNameLower.Contains("ground") || objNameLower.Contains("sofa") ||
+                    atomNameLower.Contains("furniture") || atomNameLower.Contains("room") ||
+                    atomNameLower.Contains("environment")) {
+                    return false;
+                }
+            }
+
+            // Filter Person vs Toy/Custom Objects
+            if (atomType == "Person") {
+                if (sourcePersonsJSON != null && !sourcePersonsJSON.val) return false;
+            }
+            else {
+                if (sourceToysJSON != null && !sourceToysJSON.val) return false;
+            }
+
+            return true;
+        }
+
+        public void HandleCollision(string partName, Collision collision) {
+            if (enabledJSON == null || !enabledJSON.val) return;
+            if (!IsBodyPartEnabled(partName)) return;
+            if (collision == null || collision.collider == null) return;
+
+            string sourceName;
+            if (!IsTouchingSourceAllowed(collision.collider.gameObject, out sourceName)) {
+                return;
+            }
+
+            float relVel = collision.relativeVelocity.magnitude;
+            float minThreshold = (minForceThresholdJSON != null) ? minForceThresholdJSON.val : 0.05f;
+            if (relVel < minThreshold) {
+                return;
+            }
+
+            RegisterActiveTouch(partName, sourceName, relVel);
         }
 
         public void HandleTrigger(string partName, Collider other) {
             if (enabledJSON == null || !enabledJSON.val) return;
             if (!IsBodyPartEnabled(partName)) return;
+            if (other == null) return;
 
-            Atom target = activeTargetAtom ?? containingAtom;
-            if (other != null && target != null) {
-                if (other.transform.IsChildOf(target.transform)) {
-                    return;
-                }
+            string sourceName;
+            if (!IsTouchingSourceAllowed(other.gameObject, out sourceName)) {
+                return;
             }
 
-            RegisterActiveTouch(partName, 1.0f);
+            RegisterActiveTouch(partName, sourceName, 1.0f);
         }
 
-        private void RegisterActiveTouch(string partName, float relativeVelocity) {
+        private void RegisterActiveTouch(string partName, string sourceName, float relativeVelocity) {
             isTouching = true;
             lastTouchTime = Time.time;
             lastTouchedPart = partName;
+            lastTouchingSource = sourceName;
 
             // Compute dynamic impact spike
             if (enableImpactForceJSON != null && enableImpactForceJSON.val) {
@@ -664,7 +787,7 @@ namespace MVRPlugin {
                 if (statusJSON != null) {
                     string stateStr;
                     if (isTouching) {
-                        stateStr = string.Format("[DURING: {0}]", lastTouchedPart);
+                        stateStr = string.Format("[DURING: {0} by {1}]", lastTouchedPart, lastTouchingSource);
                     }
                     else if (isFadingActive) {
                         stateStr = "[RELEASE FADING...]";
