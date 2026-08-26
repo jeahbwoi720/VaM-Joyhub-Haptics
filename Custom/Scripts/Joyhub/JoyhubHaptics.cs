@@ -168,7 +168,7 @@ namespace MVRPlugin {
 
         public override void Init() {
             try {
-                SuperController.LogMessage("Joyhub Advanced Haptics (Source Filtering) Loading...");
+                SuperController.LogMessage("Joyhub Advanced Haptics (Scrollable Dropdowns) Loading...");
 
                 // ==================== LEFT COLUMN (rightSide = false) ====================
                 CreateSectionHeader("Master Plugin Control", false);
@@ -180,7 +180,15 @@ namespace MVRPlugin {
                 string defaultPerson = (containingAtom != null && containingAtom.type == "Person") ? containingAtom.name : (persons.Count > 0 ? persons[0] : "None");
                 personSelectorJSON = new JSONStorableStringChooser("Target Person Atom", persons, defaultPerson, "Target Person", OnPersonSelected);
                 RegisterStringChooser(personSelectorJSON);
-                CreatePopup(personSelectorJSON, false);
+                
+                // Proper Scrollable Popup with Navigation Stepper Arrows
+                UIDynamicPopup personPopup = CreateScrollablePopup(personSelectorJSON, false);
+                if (personPopup != null) {
+                    personPopup.popupPanelHeight = 320f;
+                    if (personPopup.popup != null) {
+                        personPopup.popup.showPreviousNextButtons = true;
+                    }
+                }
 
                 UIDynamicButton refreshAtomsBtn = CreateButton("🔄 Refresh Scene Characters", false);
                 if (refreshAtomsBtn != null && refreshAtomsBtn.button != null) {
@@ -324,7 +332,15 @@ namespace MVRPlugin {
                 List<string> allAtoms = GetAllSceneAtomNames();
                 allowedTouchingAtomJSON = new JSONStorableStringChooser("Allowed Touching Atom", allAtoms, "Any Allowed Atom", "Allowed Atom");
                 RegisterStringChooser(allowedTouchingAtomJSON);
-                CreatePopup(allowedTouchingAtomJSON, true);
+                
+                // Proper Scrollable Popup with Navigation Stepper Arrows
+                UIDynamicPopup touchingPopup = CreateScrollablePopup(allowedTouchingAtomJSON, true);
+                if (touchingPopup != null) {
+                    touchingPopup.popupPanelHeight = 320f;
+                    if (touchingPopup.popup != null) {
+                        touchingPopup.popup.showPreviousNextButtons = true;
+                    }
+                }
 
                 sourcePersonsJSON = new JSONStorableBool("Allow: Other Characters (Persons)", true);
                 RegisterBool(sourcePersonsJSON);
@@ -484,7 +500,6 @@ namespace MVRPlugin {
             return (filterOtherJSON != null && filterOtherJSON.val);
         }
 
-        // Validate whether the incoming touching object is permitted to trigger haptics
         private bool IsTouchingSourceAllowed(GameObject otherObj, out string sourceName) {
             sourceName = "Unknown";
             if (otherObj == null) return false;
@@ -494,13 +509,11 @@ namespace MVRPlugin {
                 return false; // Skip self-collisions
             }
 
-            // Find parent Atom of colliding object
             Atom incomingAtom = otherObj.GetComponentInParent<Atom>();
             string atomName = (incomingAtom != null) ? incomingAtom.name : otherObj.name;
             string atomType = (incomingAtom != null) ? incomingAtom.type : "Object";
             sourceName = atomName;
 
-            // Check Specific Allowed Atom filter
             if (allowedTouchingAtomJSON != null && allowedTouchingAtomJSON.val != "Any Allowed Atom") {
                 if (atomName != allowedTouchingAtomJSON.val) {
                     return false;
@@ -510,7 +523,6 @@ namespace MVRPlugin {
             string objNameLower = otherObj.name.ToLower();
             string atomNameLower = atomName.ToLower();
 
-            // Ignore Clothing and Hair Collisions
             if (ignoreClothingHairJSON != null && ignoreClothingHairJSON.val) {
                 if (atomType == "Clothing" || atomType == "Hair" ||
                     objNameLower.Contains("cloth") || objNameLower.Contains("hair") ||
@@ -523,7 +535,6 @@ namespace MVRPlugin {
                 }
             }
 
-            // Ignore Environment and Furniture (Floors, Chairs, Beds, Cushions)
             if (ignoreEnvironmentJSON != null && ignoreEnvironmentJSON.val) {
                 if (objNameLower.Contains("floor") || objNameLower.Contains("bed") ||
                     objNameLower.Contains("chair") || objNameLower.Contains("cushion") ||
@@ -534,7 +545,6 @@ namespace MVRPlugin {
                 }
             }
 
-            // Filter Person vs Toy/Custom Objects
             if (atomType == "Person") {
                 if (sourcePersonsJSON != null && !sourcePersonsJSON.val) return false;
             }
@@ -583,7 +593,6 @@ namespace MVRPlugin {
             lastTouchedPart = partName;
             lastTouchingSource = sourceName;
 
-            // Compute dynamic impact spike
             if (enableImpactForceJSON != null && enableImpactForceJSON.val) {
                 float sensMultiplier = (impactSensitivityJSON != null ? impactSensitivityJSON.val : 50f) / 50f;
                 float bonus = Mathf.Clamp((relativeVelocity - 0.3f) * 15f * sensMultiplier, 0f, 35f);
@@ -636,7 +645,6 @@ namespace MVRPlugin {
 
                 bool isFadingEnabled = enableFadeJSON == null || enableFadeJSON.val;
 
-                // Decay impact bonus quickly over time
                 if (currentImpactBonus > 0f) {
                     currentImpactBonus = Mathf.Max(0f, currentImpactBonus - Time.deltaTime * 35f);
                 }
@@ -644,16 +652,13 @@ namespace MVRPlugin {
                     burstIntensity = Mathf.Max(0f, burstIntensity - Time.deltaTime * 25f);
                 }
 
-                // Check touch release timeout (0.08s after last physical contact frame)
                 if (Time.time - lastTouchTime > 0.08f) {
                     if (isTouching) {
                         isTouching = false;
-                        // Start release fade from current active intensity
                         releaseFadeIntensity = lastFinalIntensity;
                     }
                 }
 
-                // Smoothly decay release fade down to 0
                 if (!isTouching && releaseFadeIntensity > 0f) {
                     if (!isFadingEnabled) {
                         releaseFadeIntensity = 0f;
@@ -673,7 +678,6 @@ namespace MVRPlugin {
                 float beforeBase = (beforeVibeJSON != null) ? beforeVibeJSON.val : 0f;
                 bool isFadingActive = !isTouching && isFadingEnabled && (releaseFadeIntensity > beforeBase);
 
-                // Active features selection
                 bool activeHeat;
                 bool activeLight;
                 int activeSuck;
@@ -693,11 +697,8 @@ namespace MVRPlugin {
                     activePump = duringPumpJSON != null && duringPumpJSON.val;
                 }
                 else if (isTouching) {
-                    // === ACTIVELY TOUCHING / CONTINUOUS COLLISION ===
-                    // Directly reflects the During Touch slider in REAL TIME!
                     float duringBase = (duringVibeJSON != null) ? duringVibeJSON.val : 15f;
 
-                    // Motion Velocity Tracking
                     float velocityIntensity = 0f;
                     Atom target = activeTargetAtom ?? containingAtom;
                     if (target != null && motionSensitivityJSON != null && motionSensitivityJSON.val > 0f) {
@@ -709,7 +710,6 @@ namespace MVRPlugin {
 
                     finalIntensity = duringBase + velocityIntensity + currentImpactBonus + burstIntensity;
 
-                    // Individual channel sliders scale from final intensity
                     float ch2Factor = (duringCh2JSON != null ? duringCh2JSON.val : 15f) / 100f;
                     float ch3Factor = (duringCh3JSON != null ? duringCh3JSON.val : 0f) / 100f;
                     float ch4Factor = (duringCh4JSON != null ? duringCh4JSON.val : 0f) / 100f;
@@ -717,7 +717,6 @@ namespace MVRPlugin {
                     ch3Val = finalIntensity * ch3Factor;
                     ch4Val = finalIntensity * ch4Factor;
 
-                    // Active hardware features read live during sliders/toggles!
                     activeHeat = duringHeatJSON != null && duringHeatJSON.val;
                     activeLight = duringLightJSON != null && duringLightJSON.val;
                     activeSuck = duringSuckJSON != null ? Mathf.RoundToInt(duringSuckJSON.val) : 0;
@@ -725,7 +724,6 @@ namespace MVRPlugin {
                     activePump = duringPumpJSON != null && duringPumpJSON.val;
                 }
                 else if (isFadingActive) {
-                    // === RELEASING & FADING DOWN TO BEFORE-TOUCH LEVEL ===
                     finalIntensity = releaseFadeIntensity;
                     ch2Val = finalIntensity;
                     ch3Val = 0f;
@@ -738,7 +736,6 @@ namespace MVRPlugin {
                     activePump = beforePumpJSON != null && beforePumpJSON.val;
                 }
                 else {
-                    // === BEFORE TOUCH (IDLE / PROXIMITY) ===
                     if (pulseEnabledJSON != null && pulseEnabledJSON.val) {
                         float minP = pulseMinJSON != null ? pulseMinJSON.val : 15f;
                         float maxP = pulseMaxJSON != null ? pulseMaxJSON.val : 80f;
@@ -761,7 +758,6 @@ namespace MVRPlugin {
                     activePump = beforePumpJSON != null && beforePumpJSON.val;
                 }
 
-                // Apply max speed clamp
                 float maxClamp = (maxSpeedClampJSON != null) ? maxSpeedClampJSON.val : 100f;
                 finalIntensity = Mathf.Clamp(finalIntensity, 0f, maxClamp);
                 lastFinalIntensity = finalIntensity;
@@ -771,7 +767,6 @@ namespace MVRPlugin {
                 int m3 = Mathf.RoundToInt(Mathf.Clamp(ch3Val, 0f, maxClamp));
                 int m4 = Mathf.RoundToInt(Mathf.Clamp(ch4Val, 0f, maxClamp));
 
-                // Transmit JSON state
                 string jsonPacket = string.Format(
                     "{{\"vibe\":[{0},{1},{2},{3}],\"heat\":{4},\"light\":{5},\"suck\":{6},\"squeeze\":{7},\"pump\":{8}}}",
                     m1, m2, m3, m4,
@@ -783,7 +778,6 @@ namespace MVRPlugin {
 
                 SendRawPacket(jsonPacket);
 
-                // Update Status Display
                 if (statusJSON != null) {
                     string stateStr;
                     if (isTouching) {
