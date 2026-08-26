@@ -41,43 +41,52 @@ namespace MVRPlugin {
             }
         }
 
-        // ==================== LEFT COLUMN UI CONTROLS ====================
+        // ==================== LEFT COLUMN: BEFORE TOUCH (IDLE) & DYNAMICS ====================
         private JSONStorableBool enabledJSON;
-        private JSONStorableFloat beforeTouchVibeJSON;
-        private JSONStorableFloat duringTouchVibeJSON;
-        private JSONStorableFloat ch2MultiplierJSON;
-        private JSONStorableFloat ch3MultiplierJSON;
-        private JSONStorableFloat ch4MultiplierJSON;
 
+        // Before Touch (Idle) Feature Controls
+        private JSONStorableFloat beforeVibeJSON;
+        private JSONStorableBool beforeHeatJSON;
+        private JSONStorableBool beforeLightJSON;
+        private JSONStorableFloat beforeSuckJSON;
+        private JSONStorableFloat beforeSqueezeJSON;
+        private JSONStorableBool beforePumpJSON;
+
+        // Dynamics & Waveforms
         private JSONStorableBool pulseEnabledJSON;
         private JSONStorableFloat pulseMinJSON;
         private JSONStorableFloat pulseMaxJSON;
         private JSONStorableFloat pulseSpeedJSON;
-
         private JSONStorableFloat motionSensitivityJSON;
         private JSONStorableFloat touchFadeSpeedJSON;
         private JSONStorableFloat maxSpeedClampJSON;
         private JSONStorableFloat manualVibeJSON;
 
-        // ==================== RIGHT COLUMN UI CONTROLS ====================
-        private JSONStorableBool heatJSON;
-        private JSONStorableBool lightJSON;
-        private JSONStorableFloat suckJSON;
-        private JSONStorableFloat squeezeJSON;
-        private JSONStorableBool pumpJSON;
+        // ==================== RIGHT COLUMN: DURING TOUCH (ACTIVE) & BODY PARTS ====================
+        // During Touch Feature Controls
+        private JSONStorableFloat duringVibeJSON;
+        private JSONStorableFloat duringCh2JSON;
+        private JSONStorableFloat duringCh3JSON;
+        private JSONStorableFloat duringCh4JSON;
+        private JSONStorableBool duringHeatJSON;
+        private JSONStorableBool duringLightJSON;
+        private JSONStorableFloat duringSuckJSON;
+        private JSONStorableFloat duringSqueezeJSON;
+        private JSONStorableBool duringPumpJSON;
 
+        // Body Part Filters
         private JSONStorableBool filterGenitalsJSON;
         private JSONStorableBool filterBreastsJSON;
         private JSONStorableBool filterMouthJSON;
         private JSONStorableBool filterHandsJSON;
         private JSONStorableBool filterOtherJSON;
 
+        // Network & Actions
         private JSONStorableFloat portJSON;
         private JSONStorableString statusJSON;
         private JSONStorableAction burstAction;
         private JSONStorableAction stopAction;
 
-        // Network & Timing
         private UdpClient udpClient;
         private string host = "127.0.0.1";
         private int currentPort = 8888;
@@ -92,53 +101,52 @@ namespace MVRPlugin {
         private string lastTouchedPart = "None";
         private float burstIntensity = 0f;
 
-        // Feature dirty states
-        private bool lastHeat = false;
-        private bool lastLight = false;
-        private int lastSuck = 0;
-        private int lastSqueeze = 0;
-        private bool lastPump = false;
-
         private List<JoyhubCollisionForwarder> activeForwarders = new List<JoyhubCollisionForwarder>();
 
         public override void Init() {
             try {
-                SuperController.LogMessage("Joyhub Full Haptics Dashboard Loading...");
+                SuperController.LogMessage("Joyhub Advanced Before/During Touch Haptics Loading...");
 
                 // ==================== LEFT COLUMN (rightSide = false) ====================
                 enabledJSON = new JSONStorableBool("Master Enabled", true);
                 RegisterBool(enabledJSON);
                 CreateToggle(enabledJSON, false);
 
-                beforeTouchVibeJSON = new JSONStorableFloat("Before Touch Vibe % (Idle)", 0f, 0f, 100f, true);
-                RegisterFloat(beforeTouchVibeJSON);
-                CreateSlider(beforeTouchVibeJSON, false);
+                // --- BEFORE TOUCH SECTION ---
+                beforeVibeJSON = new JSONStorableFloat("Before Touch: Vibe % (Idle)", 0f, 0f, 100f, true);
+                RegisterFloat(beforeVibeJSON);
+                CreateSlider(beforeVibeJSON, false);
 
-                duringTouchVibeJSON = new JSONStorableFloat("During Touch Vibe % (Ch 1)", 80f, 0f, 100f, true);
-                RegisterFloat(duringTouchVibeJSON);
-                CreateSlider(duringTouchVibeJSON, false);
+                beforeHeatJSON = new JSONStorableBool("Before Touch: Heating [On/Off]", false);
+                RegisterBool(beforeHeatJSON);
+                CreateToggle(beforeHeatJSON, false);
 
-                ch2MultiplierJSON = new JSONStorableFloat("Motor 2 (Ch 2) Power %", 80f, 0f, 100f, true);
-                RegisterFloat(ch2MultiplierJSON);
-                CreateSlider(ch2MultiplierJSON, false);
+                beforeLightJSON = new JSONStorableBool("Before Touch: LED Lights [On/Off]", false);
+                RegisterBool(beforeLightJSON);
+                CreateToggle(beforeLightJSON, false);
 
-                ch3MultiplierJSON = new JSONStorableFloat("Motor 3 (Ch 3) Power %", 0f, 0f, 100f, true);
-                RegisterFloat(ch3MultiplierJSON);
-                CreateSlider(ch3MultiplierJSON, false);
+                beforeSuckJSON = new JSONStorableFloat("Before Touch: Suction Level (0-5)", 0f, 0f, 5f, true);
+                RegisterFloat(beforeSuckJSON);
+                CreateSlider(beforeSuckJSON, false);
 
-                ch4MultiplierJSON = new JSONStorableFloat("Motor 4 (Ch 4) Power %", 0f, 0f, 100f, true);
-                RegisterFloat(ch4MultiplierJSON);
-                CreateSlider(ch4MultiplierJSON, false);
+                beforeSqueezeJSON = new JSONStorableFloat("Before Touch: Squeeze Level (0-5)", 0f, 0f, 5f, true);
+                RegisterFloat(beforeSqueezeJSON);
+                CreateSlider(beforeSqueezeJSON, false);
 
-                pulseEnabledJSON = new JSONStorableBool("Pulse Waveform Enabled", false);
+                beforePumpJSON = new JSONStorableBool("Before Touch: Fluid Pump [On/Off]", false);
+                RegisterBool(beforePumpJSON);
+                CreateToggle(beforePumpJSON, false);
+
+                // --- DYNAMICS & WAVEFORMS ---
+                pulseEnabledJSON = new JSONStorableBool("Pulse Waveform Mode (Idle)", false);
                 RegisterBool(pulseEnabledJSON);
                 CreateToggle(pulseEnabledJSON, false);
 
-                pulseMinJSON = new JSONStorableFloat("Pulse Min Vibe %", 20f, 0f, 100f, true);
+                pulseMinJSON = new JSONStorableFloat("Pulse Min Vibe %", 15f, 0f, 100f, true);
                 RegisterFloat(pulseMinJSON);
                 CreateSlider(pulseMinJSON, false);
 
-                pulseMaxJSON = new JSONStorableFloat("Pulse Max Vibe %", 90f, 0f, 100f, true);
+                pulseMaxJSON = new JSONStorableFloat("Pulse Max Vibe %", 80f, 0f, 100f, true);
                 RegisterFloat(pulseMaxJSON);
                 CreateSlider(pulseMaxJSON, false);
 
@@ -163,26 +171,43 @@ namespace MVRPlugin {
                 CreateSlider(manualVibeJSON, false);
 
                 // ==================== RIGHT COLUMN (rightSide = true) ====================
-                heatJSON = new JSONStorableBool("Device Heating [On/Off]", false, SyncFeaturesBool);
-                RegisterBool(heatJSON);
-                CreateToggle(heatJSON, true);
+                duringVibeJSON = new JSONStorableFloat("During Touch: Vibe % (Ch 1)", 85f, 0f, 100f, true);
+                RegisterFloat(duringVibeJSON);
+                CreateSlider(duringVibeJSON, true);
 
-                lightJSON = new JSONStorableBool("Device LED Lights [On/Off]", false, SyncFeaturesBool);
-                RegisterBool(lightJSON);
-                CreateToggle(lightJSON, true);
+                duringCh2JSON = new JSONStorableFloat("During Touch: Motor 2 (Ch 2) %", 85f, 0f, 100f, true);
+                RegisterFloat(duringCh2JSON);
+                CreateSlider(duringCh2JSON, true);
 
-                suckJSON = new JSONStorableFloat("Suction Level (0-5)", 0f, 0f, 5f, true);
-                RegisterFloat(suckJSON);
-                CreateSlider(suckJSON, true);
+                duringCh3JSON = new JSONStorableFloat("During Touch: Motor 3 (Ch 3) %", 0f, 0f, 100f, true);
+                RegisterFloat(duringCh3JSON);
+                CreateSlider(duringCh3JSON, true);
 
-                squeezeJSON = new JSONStorableFloat("Squeezing Level (0-5)", 0f, 0f, 5f, true);
-                RegisterFloat(squeezeJSON);
-                CreateSlider(squeezeJSON, true);
+                duringCh4JSON = new JSONStorableFloat("During Touch: Motor 4 (Ch 4) %", 0f, 0f, 100f, true);
+                RegisterFloat(duringCh4JSON);
+                CreateSlider(duringCh4JSON, true);
 
-                pumpJSON = new JSONStorableBool("Fluid Pump [On/Off]", false, SyncFeaturesBool);
-                RegisterBool(pumpJSON);
-                CreateToggle(pumpJSON, true);
+                duringHeatJSON = new JSONStorableBool("During Touch: Heating [On/Off]", true);
+                RegisterBool(duringHeatJSON);
+                CreateToggle(duringHeatJSON, true);
 
+                duringLightJSON = new JSONStorableBool("During Touch: LED Lights [On/Off]", true);
+                RegisterBool(duringLightJSON);
+                CreateToggle(duringLightJSON, true);
+
+                duringSuckJSON = new JSONStorableFloat("During Touch: Suction Level (0-5)", 3f, 0f, 5f, true);
+                RegisterFloat(duringSuckJSON);
+                CreateSlider(duringSuckJSON, true);
+
+                duringSqueezeJSON = new JSONStorableFloat("During Touch: Squeeze Level (0-5)", 2f, 0f, 5f, true);
+                RegisterFloat(duringSqueezeJSON);
+                CreateSlider(duringSqueezeJSON, true);
+
+                duringPumpJSON = new JSONStorableBool("During Touch: Fluid Pump [On/Off]", false);
+                RegisterBool(duringPumpJSON);
+                CreateToggle(duringPumpJSON, true);
+
+                // --- BODY PART FILTERS ---
                 filterGenitalsJSON = new JSONStorableBool("Body Part: Genitals & Pelvis", true);
                 RegisterBool(filterGenitalsJSON);
                 CreateToggle(filterGenitalsJSON, true);
@@ -294,7 +319,7 @@ namespace MVRPlugin {
             lastTouchedPart = partName;
 
             float impactBonus = Mathf.Clamp((relativeVelocity - 0.5f) * 10f, 0f, 20f);
-            float targetValue = (duringTouchVibeJSON != null ? duringTouchVibeJSON.val : 80f) + impactBonus;
+            float targetValue = (duringVibeJSON != null ? duringVibeJSON.val : 85f) + impactBonus;
 
             touchIntensity = Mathf.Max(touchIntensity, Mathf.Clamp(targetValue, 0f, 100f));
         }
@@ -308,18 +333,7 @@ namespace MVRPlugin {
             touchIntensity = 0f;
             isTouching = false;
             if (manualVibeJSON != null) manualVibeJSON.val = 0f;
-            if (heatJSON != null) heatJSON.val = false;
-            if (lightJSON != null) lightJSON.val = false;
-            if (suckJSON != null) suckJSON.val = 0f;
-            if (squeezeJSON != null) squeezeJSON.val = 0f;
-            if (pumpJSON != null) pumpJSON.val = false;
-            if (pulseEnabledJSON != null) pulseEnabledJSON.val = false;
-
             SendRawPacket("STOP");
-        }
-
-        private void SyncFeaturesBool(bool val) {
-            // Triggered automatically on UI changes
         }
 
         private void InitUDP(int port) {
@@ -357,7 +371,7 @@ namespace MVRPlugin {
                 }
 
                 // Decay touch and burst
-                float decayStep = Time.deltaTime * touchFadeSpeedJSON.val * 25f;
+                float decayStep = Time.deltaTime * (touchFadeSpeedJSON != null ? touchFadeSpeedJSON.val : 3f) * 25f;
                 if (!isTouching && touchIntensity > 0f) {
                     touchIntensity = Mathf.Max(0f, touchIntensity - decayStep);
                 }
@@ -371,23 +385,32 @@ namespace MVRPlugin {
                 lastSendTime = Time.time;
 
                 float finalIntensity = 0f;
+                bool isCurrentlyActiveTouch = isTouching || touchIntensity > 5f || burstIntensity > 5f;
 
-                // 1. Manual Override Check
+                // Active features selection (Before vs. During Touch)
+                bool activeHeat;
+                bool activeLight;
+                int activeSuck;
+                int activeSqueeze;
+                bool activePump;
+                float ch2Val, ch3Val, ch4Val;
+
                 if (manualVibeJSON != null && manualVibeJSON.val > 0f) {
                     finalIntensity = manualVibeJSON.val;
+                    ch2Val = finalIntensity;
+                    ch3Val = 0f;
+                    ch4Val = 0f;
+                    activeHeat = duringHeatJSON != null && duringHeatJSON.val;
+                    activeLight = duringLightJSON != null && duringLightJSON.val;
+                    activeSuck = duringSuckJSON != null ? Mathf.RoundToInt(duringSuckJSON.val) : 0;
+                    activeSqueeze = duringSqueezeJSON != null ? Mathf.RoundToInt(duringSqueezeJSON.val) : 0;
+                    activePump = duringPumpJSON != null && duringPumpJSON.val;
                 }
-                // 2. Pulse Waveform Generator
-                else if (pulseEnabledJSON != null && pulseEnabledJSON.val) {
-                    float minP = pulseMinJSON != null ? pulseMinJSON.val : 20f;
-                    float maxP = pulseMaxJSON != null ? pulseMaxJSON.val : 90f;
-                    float freq = pulseSpeedJSON != null ? pulseSpeedJSON.val : 1.0f;
-                    float wave = (Mathf.Sin(Time.time * freq * Mathf.PI * 2f) + 1f) * 0.5f;
-                    finalIntensity = Mathf.Lerp(minP, maxP, wave);
-                }
-                // 3. Normal Touch + Motion Velocity
-                else {
-                    float beforeTouchBase = (beforeTouchVibeJSON != null) ? beforeTouchVibeJSON.val : 0f;
+                else if (isCurrentlyActiveTouch) {
+                    // DURING TOUCH STATE
+                    float duringBase = duringVibeJSON != null ? duringVibeJSON.val : 85f;
 
+                    // Motion Velocity Tracking
                     float velocityIntensity = 0f;
                     if (containingAtom != null && motionSensitivityJSON != null && motionSensitivityJSON.val > 0f) {
                         Vector3 currentPos = containingAtom.transform.position;
@@ -396,46 +419,73 @@ namespace MVRPlugin {
                         velocityIntensity = speed * motionSensitivityJSON.val * 15f;
                     }
 
-                    float activeTouchVal = Mathf.Max(touchIntensity, burstIntensity);
-                    finalIntensity = Mathf.Max(beforeTouchBase + velocityIntensity, activeTouchVal);
+                    float maxTouchVal = Mathf.Max(touchIntensity, burstIntensity);
+                    finalIntensity = Mathf.Max(duringBase + velocityIntensity, maxTouchVal);
+
+                    ch2Val = duringCh2JSON != null ? duringCh2JSON.val : finalIntensity;
+                    ch3Val = duringCh3JSON != null ? duringCh3JSON.val : 0f;
+                    ch4Val = duringCh4JSON != null ? duringCh4JSON.val : 0f;
+
+                    activeHeat = duringHeatJSON != null && duringHeatJSON.val;
+                    activeLight = duringLightJSON != null && duringLightJSON.val;
+                    activeSuck = duringSuckJSON != null ? Mathf.RoundToInt(duringSuckJSON.val) : 0;
+                    activeSqueeze = duringSqueezeJSON != null ? Mathf.RoundToInt(duringSqueezeJSON.val) : 0;
+                    activePump = duringPumpJSON != null && duringPumpJSON.val;
+                }
+                else {
+                    // BEFORE TOUCH (IDLE / PROXIMITY STATE)
+                    if (pulseEnabledJSON != null && pulseEnabledJSON.val) {
+                        float minP = pulseMinJSON != null ? pulseMinJSON.val : 15f;
+                        float maxP = pulseMaxJSON != null ? pulseMaxJSON.val : 80f;
+                        float freq = pulseSpeedJSON != null ? pulseSpeedJSON.val : 1.0f;
+                        float wave = (Mathf.Sin(Time.time * freq * Mathf.PI * 2f) + 1f) * 0.5f;
+                        finalIntensity = Mathf.Lerp(minP, maxP, wave);
+                    }
+                    else {
+                        finalIntensity = beforeVibeJSON != null ? beforeVibeJSON.val : 0f;
+                    }
+
+                    ch2Val = finalIntensity;
+                    ch3Val = 0f;
+                    ch4Val = 0f;
+
+                    activeHeat = beforeHeatJSON != null && beforeHeatJSON.val;
+                    activeLight = beforeLightJSON != null && beforeLightJSON.val;
+                    activeSuck = beforeSuckJSON != null ? Mathf.RoundToInt(beforeSuckJSON.val) : 0;
+                    activeSqueeze = beforeSqueezeJSON != null ? Mathf.RoundToInt(beforeSqueezeJSON.val) : 0;
+                    activePump = beforePumpJSON != null && beforePumpJSON.val;
                 }
 
-                // Apply max clamp
+                // Apply max speed clamp
                 float maxClamp = (maxSpeedClampJSON != null) ? maxSpeedClampJSON.val : 100f;
                 finalIntensity = Mathf.Clamp(finalIntensity, 0f, maxClamp);
 
-                // Multi-Channel Speeds
                 int m1 = Mathf.RoundToInt(finalIntensity);
-                int m2 = Mathf.RoundToInt(finalIntensity * (ch2MultiplierJSON != null ? ch2MultiplierJSON.val / 100f : 0.8f));
-                int m3 = Mathf.RoundToInt(finalIntensity * (ch3MultiplierJSON != null ? ch3MultiplierJSON.val / 100f : 0f));
-                int m4 = Mathf.RoundToInt(finalIntensity * (ch4MultiplierJSON != null ? ch4MultiplierJSON.val / 100f : 0f));
+                int m2 = Mathf.RoundToInt(Mathf.Clamp(ch2Val, 0f, maxClamp));
+                int m3 = Mathf.RoundToInt(Mathf.Clamp(ch3Val, 0f, maxClamp));
+                int m4 = Mathf.RoundToInt(Mathf.Clamp(ch4Val, 0f, maxClamp));
 
-                // Send Full JSON State Packet to Bridge
-                bool curHeat = heatJSON != null && heatJSON.val;
-                bool curLight = lightJSON != null && lightJSON.val;
-                int curSuck = suckJSON != null ? Mathf.RoundToInt(suckJSON.val) : 0;
-                int curSqueeze = squeezeJSON != null ? Mathf.RoundToInt(squeezeJSON.val) : 0;
-                bool curPump = pumpJSON != null && pumpJSON.val;
-
+                // Transmit JSON state
                 string jsonPacket = string.Format(
                     "{{\"vibe\":[{0},{1},{2},{3}],\"heat\":{4},\"light\":{5},\"suck\":{6},\"squeeze\":{7},\"pump\":{8}}}",
                     m1, m2, m3, m4,
-                    curHeat ? "true" : "false",
-                    curLight ? "true" : "false",
-                    curSuck, curSqueeze,
-                    curPump ? "true" : "false"
+                    activeHeat ? "true" : "false",
+                    activeLight ? "true" : "false",
+                    activeSuck, activeSqueeze,
+                    activePump ? "true" : "false"
                 );
 
                 SendRawPacket(jsonPacket);
 
                 // Update Status Display
                 if (statusJSON != null) {
-                    string touchIndicator = (isTouching || touchIntensity > 5f) ? string.Format(" [TOUCH: {0}]", lastTouchedPart) : " [IDLE]";
-                    statusJSON.val = string.Format("Vibe: {0}%{1} | H:{2} L:{3} S:{4} | Port {5}",
-                        m1, touchIndicator,
-                        curHeat ? "ON" : "OFF",
-                        curLight ? "ON" : "OFF",
-                        curSuck,
+                    string stateStr = isCurrentlyActiveTouch ? string.Format("[DURING: {0}]", lastTouchedPart) : "[BEFORE TOUCH (IDLE)]";
+                    statusJSON.val = string.Format("{0} -> Vibe:{1}% | H:{2} L:{3} S:{4} | Port {5}",
+                        stateStr,
+                        m1,
+                        activeHeat ? "ON" : "OFF",
+                        activeLight ? "ON" : "OFF",
+                        activeSuck,
                         currentPort);
                 }
             }
