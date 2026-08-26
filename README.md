@@ -76,7 +76,8 @@ Copy the Custom/Scripts/Joyhub/ folder into your Virt-a-Mate root directory:
 ## 🛠️ Standalone CLI Controller
 
 If you want to control or test your device outside of VaM:
-* Run JoyhubController.bat (or python joyhub_controller.py) for a rich interactive terminal shell (ibe <0-100>, pulse, heat on/off, light on/off, suck 1-5, squeeze 1-5, pump on/off, stop, aw <hex>).
+* Run JoyhubController.bat (or python joyhub_controller.py) for a rich interactive terminal shell (ibe <0-100>, pulse, heat on/off, light on/off, suck 1-5, squeeze 1-5, pump on/off, stop, 
+aw <hex>).
 
 ---
 
