@@ -53,7 +53,7 @@ namespace MVRPlugin {
         private JSONStorableFloat beforeSqueezeJSON;
         private JSONStorableBool beforePumpJSON;
 
-        // Dynamics, Impact Hardness & Waveforms
+        // Dynamics, Hardness & Waveforms
         private JSONStorableBool enableImpactForceJSON;
         private JSONStorableFloat impactSensitivityJSON;
         private JSONStorableBool pulseEnabledJSON;
@@ -101,10 +101,12 @@ namespace MVRPlugin {
         private float sendInterval = 0.04f; // 25 Hz updates
 
         private bool isTouching = false;
-        private float touchIntensity = 0f;
         private float lastTouchTime = 0f;
         private string lastTouchedPart = "None";
+        private float currentImpactBonus = 0f;
+        private float releaseFadeIntensity = 0f;
         private float burstIntensity = 0f;
+        private float lastFinalIntensity = 0f;
 
         private List<JoyhubCollisionForwarder> activeForwarders = new List<JoyhubCollisionForwarder>();
 
@@ -142,7 +144,7 @@ namespace MVRPlugin {
 
         public override void Init() {
             try {
-                SuperController.LogMessage("Joyhub Advanced Haptics (Session & Atom Mode) Loading...");
+                SuperController.LogMessage("Joyhub Advanced Haptics (Reactive Real-time) Loading...");
 
                 // ==================== LEFT COLUMN (rightSide = false) ====================
                 CreateSectionHeader("Master Plugin Control", false);
@@ -150,7 +152,6 @@ namespace MVRPlugin {
                 RegisterBool(enabledJSON);
                 CreateToggle(enabledJSON, false);
 
-                // Target Person Selector (Enables full Session Plugin mode!)
                 List<string> persons = GetScenePersonNames();
                 string defaultPerson = (containingAtom != null && containingAtom.type == "Person") ? containingAtom.name : (persons.Count > 0 ? persons[0] : "None");
                 personSelectorJSON = new JSONStorableStringChooser("Target Person Atom", persons, defaultPerson, "Target Person", OnPersonSelected);
@@ -429,7 +430,6 @@ namespace MVRPlugin {
             if (enabledJSON == null || !enabledJSON.val) return;
             if (!IsBodyPartEnabled(partName)) return;
 
-            // IGNORE SELF-COLLISIONS: Skip if colliding object belongs to the target character
             Atom target = activeTargetAtom ?? containingAtom;
             if (collision != null && collision.collider != null && target != null) {
                 if (collision.collider.transform.IsChildOf(target.transform)) {
@@ -445,7 +445,6 @@ namespace MVRPlugin {
             if (enabledJSON == null || !enabledJSON.val) return;
             if (!IsBodyPartEnabled(partName)) return;
 
-            // IGNORE SELF-TRIGGERS: Skip if trigger overlap belongs to the target character
             Atom target = activeTargetAtom ?? containingAtom;
             if (other != null && target != null) {
                 if (other.transform.IsChildOf(target.transform)) {
@@ -461,15 +460,12 @@ namespace MVRPlugin {
             lastTouchTime = Time.time;
             lastTouchedPart = partName;
 
-            // Dynamic Hardness & Impact Force Calculation
-            float impactBonus = 0f;
+            // Compute dynamic impact spike
             if (enableImpactForceJSON != null && enableImpactForceJSON.val) {
                 float sensMultiplier = (impactSensitivityJSON != null ? impactSensitivityJSON.val : 50f) / 50f;
-                impactBonus = Mathf.Clamp((relativeVelocity - 0.3f) * 15f * sensMultiplier, 0f, 35f);
+                float bonus = Mathf.Clamp((relativeVelocity - 0.3f) * 15f * sensMultiplier, 0f, 35f);
+                currentImpactBonus = Mathf.Max(currentImpactBonus, bonus);
             }
-
-            float targetValue = (duringVibeJSON != null ? duringVibeJSON.val : 15f) + impactBonus;
-            touchIntensity = Mathf.Max(touchIntensity, Mathf.Clamp(targetValue, 0f, 100f));
         }
 
         public void TriggerBurstAction() {
@@ -478,7 +474,8 @@ namespace MVRPlugin {
 
         public void StopAllAction() {
             burstIntensity = 0f;
-            touchIntensity = 0f;
+            currentImpactBonus = 0f;
+            releaseFadeIntensity = 0f;
             isTouching = false;
             if (manualVibeJSON != null) manualVibeJSON.val = 0f;
             SendRawPacket("STOP");
@@ -516,27 +513,32 @@ namespace MVRPlugin {
 
                 bool isFadingEnabled = enableFadeJSON == null || enableFadeJSON.val;
 
-                // Check touch release timeout (0.08s after last physical touch event)
+                // Decay impact bonus quickly over time
+                if (currentImpactBonus > 0f) {
+                    currentImpactBonus = Mathf.Max(0f, currentImpactBonus - Time.deltaTime * 35f);
+                }
+                if (burstIntensity > 0f) {
+                    burstIntensity = Mathf.Max(0f, burstIntensity - Time.deltaTime * 25f);
+                }
+
+                // Check touch release timeout (0.08s after last physical contact frame)
                 if (Time.time - lastTouchTime > 0.08f) {
-                    isTouching = false;
-                    if (!isFadingEnabled) {
-                        touchIntensity = 0f;
+                    if (isTouching) {
+                        isTouching = false;
+                        // Start release fade from current active intensity
+                        releaseFadeIntensity = lastFinalIntensity;
                     }
                 }
 
-                // Decay touch and burst
-                if (!isTouching && touchIntensity > 0f) {
+                // Smoothly decay release fade down to 0
+                if (!isTouching && releaseFadeIntensity > 0f) {
                     if (!isFadingEnabled) {
-                        touchIntensity = 0f;
+                        releaseFadeIntensity = 0f;
                     }
                     else {
                         float decayStep = Time.deltaTime * (touchFadeSpeedJSON != null ? touchFadeSpeedJSON.val : 3f) * 25f;
-                        touchIntensity = Mathf.Max(0f, touchIntensity - decayStep);
+                        releaseFadeIntensity = Mathf.Max(0f, releaseFadeIntensity - decayStep);
                     }
-                }
-                if (burstIntensity > 0f) {
-                    float decayStep = Time.deltaTime * (touchFadeSpeedJSON != null ? touchFadeSpeedJSON.val : 3f) * 25f;
-                    burstIntensity = Mathf.Max(0f, burstIntensity - decayStep);
                 }
 
                 if (Time.time - lastSendTime < sendInterval) {
@@ -545,10 +547,10 @@ namespace MVRPlugin {
                 lastSendTime = Time.time;
 
                 float finalIntensity = 0f;
-                bool isCurrentlyActiveTouch = isTouching;
-                bool isFading = isFadingEnabled && (touchIntensity > 5f || burstIntensity > 5f);
+                float beforeBase = (beforeVibeJSON != null) ? beforeVibeJSON.val : 0f;
+                bool isFadingActive = !isTouching && isFadingEnabled && (releaseFadeIntensity > beforeBase);
 
-                // Active features selection (Before vs. During Touch)
+                // Active features selection
                 bool activeHeat;
                 bool activeLight;
                 int activeSuck;
@@ -567,9 +569,10 @@ namespace MVRPlugin {
                     activeSqueeze = duringSqueezeJSON != null ? Mathf.RoundToInt(duringSqueezeJSON.val) : 0;
                     activePump = duringPumpJSON != null && duringPumpJSON.val;
                 }
-                else if (isCurrentlyActiveTouch || isFading) {
-                    // DURING TOUCH / FADING RELEASE STATE
-                    float duringBase = isCurrentlyActiveTouch ? (duringVibeJSON != null ? duringVibeJSON.val : 15f) : 0f;
+                else if (isTouching) {
+                    // === ACTIVELY TOUCHING / CONTINUOUS COLLISION ===
+                    // Directly reflects the During Touch slider in REAL TIME!
+                    float duringBase = (duringVibeJSON != null) ? duringVibeJSON.val : 15f;
 
                     // Motion Velocity Tracking
                     float velocityIntensity = 0f;
@@ -581,30 +584,38 @@ namespace MVRPlugin {
                         velocityIntensity = speed * motionSensitivityJSON.val * 15f;
                     }
 
-                    float maxTouchVal = Mathf.Max(touchIntensity, burstIntensity);
-                    finalIntensity = Mathf.Max(duringBase + velocityIntensity, maxTouchVal);
+                    finalIntensity = duringBase + velocityIntensity + currentImpactBonus + burstIntensity;
 
-                    ch2Val = duringCh2JSON != null ? (finalIntensity * (duringCh2JSON.val / 100f)) : finalIntensity;
-                    ch3Val = duringCh3JSON != null ? (finalIntensity * (duringCh3JSON.val / 100f)) : 0f;
-                    ch4Val = duringCh4JSON != null ? (finalIntensity * (duringCh4JSON.val / 100f)) : 0f;
+                    // Individual channel sliders scale from final intensity
+                    float ch2Factor = (duringCh2JSON != null ? duringCh2JSON.val : 15f) / 100f;
+                    float ch3Factor = (duringCh3JSON != null ? duringCh3JSON.val : 0f) / 100f;
+                    float ch4Factor = (duringCh4JSON != null ? duringCh4JSON.val : 0f) / 100f;
+                    ch2Val = finalIntensity * ch2Factor;
+                    ch3Val = finalIntensity * ch3Factor;
+                    ch4Val = finalIntensity * ch4Factor;
 
-                    if (isCurrentlyActiveTouch) {
-                        activeHeat = duringHeatJSON != null && duringHeatJSON.val;
-                        activeLight = duringLightJSON != null && duringLightJSON.val;
-                        activeSuck = duringSuckJSON != null ? Mathf.RoundToInt(duringSuckJSON.val) : 0;
-                        activeSqueeze = duringSqueezeJSON != null ? Mathf.RoundToInt(duringSqueezeJSON.val) : 0;
-                        activePump = duringPumpJSON != null && duringPumpJSON.val;
-                    }
-                    else {
-                        activeHeat = beforeHeatJSON != null && beforeHeatJSON.val;
-                        activeLight = beforeLightJSON != null && beforeLightJSON.val;
-                        activeSuck = beforeSuckJSON != null ? Mathf.RoundToInt(beforeSuckJSON.val) : 0;
-                        activeSqueeze = beforeSqueezeJSON != null ? Mathf.RoundToInt(beforeSqueezeJSON.val) : 0;
-                        activePump = beforePumpJSON != null && beforePumpJSON.val;
-                    }
+                    // Active hardware features read live during sliders/toggles!
+                    activeHeat = duringHeatJSON != null && duringHeatJSON.val;
+                    activeLight = duringLightJSON != null && duringLightJSON.val;
+                    activeSuck = duringSuckJSON != null ? Mathf.RoundToInt(duringSuckJSON.val) : 0;
+                    activeSqueeze = duringSqueezeJSON != null ? Mathf.RoundToInt(duringSqueezeJSON.val) : 0;
+                    activePump = duringPumpJSON != null && duringPumpJSON.val;
+                }
+                else if (isFadingActive) {
+                    // === RELEASING & FADING DOWN TO BEFORE-TOUCH LEVEL ===
+                    finalIntensity = releaseFadeIntensity;
+                    ch2Val = finalIntensity;
+                    ch3Val = 0f;
+                    ch4Val = 0f;
+
+                    activeHeat = beforeHeatJSON != null && beforeHeatJSON.val;
+                    activeLight = beforeLightJSON != null && beforeLightJSON.val;
+                    activeSuck = beforeSuckJSON != null ? Mathf.RoundToInt(beforeSuckJSON.val) : 0;
+                    activeSqueeze = beforeSqueezeJSON != null ? Mathf.RoundToInt(beforeSqueezeJSON.val) : 0;
+                    activePump = beforePumpJSON != null && beforePumpJSON.val;
                 }
                 else {
-                    // BEFORE TOUCH (IDLE / PROXIMITY STATE)
+                    // === BEFORE TOUCH (IDLE / PROXIMITY) ===
                     if (pulseEnabledJSON != null && pulseEnabledJSON.val) {
                         float minP = pulseMinJSON != null ? pulseMinJSON.val : 15f;
                         float maxP = pulseMaxJSON != null ? pulseMaxJSON.val : 80f;
@@ -613,7 +624,7 @@ namespace MVRPlugin {
                         finalIntensity = Mathf.Lerp(minP, maxP, wave);
                     }
                     else {
-                        finalIntensity = beforeVibeJSON != null ? beforeVibeJSON.val : 0f;
+                        finalIntensity = beforeBase;
                     }
 
                     ch2Val = finalIntensity;
@@ -630,6 +641,7 @@ namespace MVRPlugin {
                 // Apply max speed clamp
                 float maxClamp = (maxSpeedClampJSON != null) ? maxSpeedClampJSON.val : 100f;
                 finalIntensity = Mathf.Clamp(finalIntensity, 0f, maxClamp);
+                lastFinalIntensity = finalIntensity;
 
                 int m1 = Mathf.RoundToInt(finalIntensity);
                 int m2 = Mathf.RoundToInt(Mathf.Clamp(ch2Val, 0f, maxClamp));
@@ -651,10 +663,10 @@ namespace MVRPlugin {
                 // Update Status Display
                 if (statusJSON != null) {
                     string stateStr;
-                    if (isCurrentlyActiveTouch) {
+                    if (isTouching) {
                         stateStr = string.Format("[DURING: {0}]", lastTouchedPart);
                     }
-                    else if (isFading) {
+                    else if (isFadingActive) {
                         stateStr = "[RELEASE FADING...]";
                     }
                     else {
