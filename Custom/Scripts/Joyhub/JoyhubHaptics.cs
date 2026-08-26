@@ -168,7 +168,7 @@ namespace MVRPlugin {
 
         public override void Init() {
             try {
-                SuperController.LogMessage("Joyhub Advanced Haptics (Full Male & Female Genital Matrix) Loading...");
+                SuperController.LogMessage("Joyhub Advanced Haptics (Precision Anatomy) Loading...");
 
                 // ==================== LEFT COLUMN (rightSide = false) ====================
                 CreateSectionHeader("Master Plugin Control", false);
@@ -478,28 +478,34 @@ namespace MVRPlugin {
             } catch (Exception) { }
         }
 
-        // Complete genital detection across Male & Female DAZ / VaM rigs
+        // Precise Genital recognition that ignores broad "genesis" character roots
         private bool IsGenitalName(string name) {
             if (string.IsNullOrEmpty(name)) return false;
             string lower = name.ToLower();
 
-            // DAZ Genesis Male Genital bones: Gen1, Gen2, Gen3, Gen4, Gen5, Gen6, male_genitals, etc.
-            if (lower.StartsWith("gen") || lower.Contains("gen1") || lower.Contains("gen2") ||
-                lower.Contains("gen3") || lower.Contains("gen4") || lower.Contains("gen5") || lower.Contains("gen6")) {
+            // Ignore general character mesh root names
+            if (lower == "genesis" || lower == "genesis8" || lower == "genesis8female" ||
+                lower == "genesis8male" || lower == "genesis2" || lower == "genesis3" ||
+                lower.StartsWith("generic")) {
+                return false;
+            }
+
+            // Exact DAZ Genesis male genital bones (gen1, gen2, gen3, gen4, gen5, gen6)
+            if (lower == "gen" || lower.StartsWith("gen1") || lower.StartsWith("gen2") ||
+                lower.StartsWith("gen3") || lower.StartsWith("gen4") || lower.StartsWith("gen5") ||
+                lower.StartsWith("gen6") || lower.Contains("genital") || lower.Contains("male_gen")) {
                 return true;
             }
 
             return lower.Contains("pelvis") || lower.Contains("labia") || lower.Contains("vagina") ||
                    lower.Contains("penis") || lower.Contains("testes") || lower.Contains("anus") ||
-                   lower.Contains("glute") || lower.Contains("genital") || lower.Contains("glans") ||
-                   lower.Contains("gland") || lower.Contains("shaft") || lower.Contains("scrotum") ||
-                   lower.Contains("clit") || lower.Contains("urethra") || lower.Contains("cervix") ||
-                   lower.Contains("gspot") || lower.Contains("foreskin") || lower.Contains("tip") ||
-                   lower.Contains("groin") || lower.Contains("crotch") || lower.Contains("dick") ||
-                   lower.Contains("cock") || lower.Contains("phallus") || lower.Contains("male_gen") ||
-                   lower.Contains("dildo") || lower.Contains("p_base") || lower.Contains("p_mid") ||
-                   lower.Contains("p_tip") || lower.Contains("penishead") || lower.Contains("penisbase") ||
-                   lower.Contains("penistip");
+                   lower.Contains("glute") || lower.Contains("glans") || lower.Contains("gland") ||
+                   lower.Contains("shaft") || lower.Contains("scrotum") || lower.Contains("clit") ||
+                   lower.Contains("urethra") || lower.Contains("cervix") || lower.Contains("gspot") ||
+                   lower.Contains("foreskin") || lower.Contains("dick") || lower.Contains("cock") ||
+                   lower.Contains("phallus") || lower.Contains("dildo") || lower.Contains("p_base") ||
+                   lower.Contains("p_mid") || lower.Contains("p_tip") || lower.Contains("penishead") ||
+                   lower.Contains("penisbase") || lower.Contains("penistip");
         }
 
         private bool IsHandName(string name) {
@@ -684,13 +690,15 @@ namespace MVRPlugin {
                 if (udpClient != null) {
                     udpClient.Close();
                 }
-                udpClient = new UdpClient();
+                udpClient = new LoveUdpClientWrapper();
                 currentPort = port;
             }
             catch (Exception ex) {
                 SuperController.LogError("JoyhubHaptics UDP Init Error: " + ex);
             }
         }
+
+        private class LoveUdpClientWrapper : UdpClient { }
 
         void Start() {
             Atom target = activeTargetAtom ?? containingAtom;
