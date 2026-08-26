@@ -58,6 +58,7 @@ namespace MVRPlugin {
         private JSONStorableFloat pulseMaxJSON;
         private JSONStorableFloat pulseSpeedJSON;
         private JSONStorableFloat motionSensitivityJSON;
+        private JSONStorableBool enableFadeJSON;
         private JSONStorableFloat touchFadeSpeedJSON;
         private JSONStorableFloat maxSpeedClampJSON;
         private JSONStorableFloat manualVibeJSON;
@@ -173,6 +174,10 @@ namespace MVRPlugin {
                 motionSensitivityJSON = new JSONStorableFloat("Motion Velocity Sensitivity", 1.5f, 0f, 10f, true);
                 RegisterFloat(motionSensitivityJSON);
                 CreateSlider(motionSensitivityJSON, false);
+
+                enableFadeJSON = new JSONStorableBool("Enable Touch Release Fade", true);
+                RegisterBool(enableFadeJSON);
+                CreateToggle(enableFadeJSON, false);
 
                 touchFadeSpeedJSON = new JSONStorableFloat("Touch Release Fade Speed", 3.0f, 0.5f, 15f, true);
                 RegisterFloat(touchFadeSpeedJSON);
@@ -408,17 +413,28 @@ namespace MVRPlugin {
                     InitUDP((int)portJSON.val);
                 }
 
+                bool isFadingEnabled = enableFadeJSON == null || enableFadeJSON.val;
+
                 // Check touch release timeout (0.08s after last physical touch event)
                 if (Time.time - lastTouchTime > 0.08f) {
                     isTouching = false;
+                    if (!isFadingEnabled) {
+                        touchIntensity = 0f;
+                    }
                 }
 
                 // Decay touch and burst
-                float decayStep = Time.deltaTime * (touchFadeSpeedJSON != null ? touchFadeSpeedJSON.val : 3f) * 25f;
                 if (!isTouching && touchIntensity > 0f) {
-                    touchIntensity = Mathf.Max(0f, touchIntensity - decayStep);
+                    if (!isFadingEnabled) {
+                        touchIntensity = 0f;
+                    }
+                    else {
+                        float decayStep = Time.deltaTime * (touchFadeSpeedJSON != null ? touchFadeSpeedJSON.val : 3f) * 25f;
+                        touchIntensity = Mathf.Max(0f, touchIntensity - decayStep);
+                    }
                 }
                 if (burstIntensity > 0f) {
+                    float decayStep = Time.deltaTime * (touchFadeSpeedJSON != null ? touchFadeSpeedJSON.val : 3f) * 25f;
                     burstIntensity = Mathf.Max(0f, burstIntensity - decayStep);
                 }
 
@@ -429,7 +445,7 @@ namespace MVRPlugin {
 
                 float finalIntensity = 0f;
                 bool isCurrentlyActiveTouch = isTouching;
-                bool isFading = touchIntensity > 5f || burstIntensity > 5f;
+                bool isFading = isFadingEnabled && (touchIntensity > 5f || burstIntensity > 5f);
 
                 // Active features selection (Before vs. During Touch)
                 bool activeHeat;
@@ -470,7 +486,6 @@ namespace MVRPlugin {
                     ch3Val = duringCh3JSON != null ? (finalIntensity * (duringCh3JSON.val / 100f)) : 0f;
                     ch4Val = duringCh4JSON != null ? (finalIntensity * (duringCh4JSON.val / 100f)) : 0f;
 
-                    // Features switch to DURING when touching, or smoothly revert to BEFORE when released
                     if (isCurrentlyActiveTouch) {
                         activeHeat = duringHeatJSON != null && duringHeatJSON.val;
                         activeLight = duringLightJSON != null && duringLightJSON.val;
