@@ -229,15 +229,15 @@ namespace MVRPlugin {
                 RegisterBool(filterGenitalsJSON);
                 CreateToggle(filterGenitalsJSON, true);
 
-                filterBreastsJSON = new JSONStorableBool("Body Part: Breasts & Chest", true);
+                filterBreastsJSON = new JSONStorableBool("Body Part: Breasts & Chest", false);
                 RegisterBool(filterBreastsJSON);
                 CreateToggle(filterBreastsJSON, true);
 
-                filterMouthJSON = new JSONStorableBool("Body Part: Mouth, Lips & Head", true);
+                filterMouthJSON = new JSONStorableBool("Body Part: Mouth, Lips & Head", false);
                 RegisterBool(filterMouthJSON);
                 CreateToggle(filterMouthJSON, true);
 
-                filterHandsJSON = new JSONStorableBool("Body Part: Hands & Arms", true);
+                filterHandsJSON = new JSONStorableBool("Body Part: Hands & Arms", false);
                 RegisterBool(filterHandsJSON);
                 CreateToggle(filterHandsJSON, true);
 
