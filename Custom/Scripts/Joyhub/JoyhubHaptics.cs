@@ -56,7 +56,6 @@ namespace MVRPlugin {
         // Dynamics, Hardness & Waveforms
         private JSONStorableBool enableImpactForceJSON;
         private JSONStorableFloat impactSensitivityJSON;
-        private JSONStorableFloat minForceThresholdJSON;
         private JSONStorableBool pulseEnabledJSON;
         private JSONStorableFloat pulseMinJSON;
         private JSONStorableFloat pulseMaxJSON;
@@ -79,11 +78,11 @@ namespace MVRPlugin {
         private JSONStorableFloat duringSqueezeJSON;
         private JSONStorableBool duringPumpJSON;
 
-        // Body Part Filters (What gets touched)
+        // Body Part Filters (What gets touched / interacts)
         private JSONStorableBool filterGenitalsJSON;
+        private JSONStorableBool filterHandsJSON;
         private JSONStorableBool filterBreastsJSON;
         private JSONStorableBool filterMouthJSON;
-        private JSONStorableBool filterHandsJSON;
         private JSONStorableBool filterOtherJSON;
 
         // Touch Source Filters (What is allowed to touch)
@@ -168,7 +167,7 @@ namespace MVRPlugin {
 
         public override void Init() {
             try {
-                SuperController.LogMessage("Joyhub Advanced Haptics (Scrollable Dropdowns) Loading...");
+                SuperController.LogMessage("Joyhub Advanced Haptics (Full Hand & Genital Interaction) Loading...");
 
                 // ==================== LEFT COLUMN (rightSide = false) ====================
                 CreateSectionHeader("Master Plugin Control", false);
@@ -224,10 +223,6 @@ namespace MVRPlugin {
                 impactSensitivityJSON = new JSONStorableFloat("Touch Hardness Sensitivity %", 50f, 0f, 100f, true);
                 RegisterFloat(impactSensitivityJSON);
                 CreateSlider(impactSensitivityJSON, false);
-
-                minForceThresholdJSON = new JSONStorableFloat("Min Collision Force Threshold", 0.05f, 0.0f, 1.0f, true);
-                RegisterFloat(minForceThresholdJSON);
-                CreateSlider(minForceThresholdJSON, false);
 
                 pulseEnabledJSON = new JSONStorableBool("Pulse Waveform Mode (Idle)", false);
                 RegisterBool(pulseEnabledJSON);
@@ -304,9 +299,13 @@ namespace MVRPlugin {
                 CreateToggle(duringPumpJSON, true);
 
                 CreateSectionHeader("Targeted Body Parts", true);
-                filterGenitalsJSON = new JSONStorableBool("Body Part: Genitals & Pelvis", true);
+                filterGenitalsJSON = new JSONStorableBool("Body Part: Genitals (Penis/Glans/Vagina)", true);
                 RegisterBool(filterGenitalsJSON);
                 CreateToggle(filterGenitalsJSON, true);
+
+                filterHandsJSON = new JSONStorableBool("Body Part: Hands & Fingers", true);
+                RegisterBool(filterHandsJSON);
+                CreateToggle(filterHandsJSON, true);
 
                 filterBreastsJSON = new JSONStorableBool("Body Part: Breasts & Chest", false);
                 RegisterBool(filterBreastsJSON);
@@ -315,10 +314,6 @@ namespace MVRPlugin {
                 filterMouthJSON = new JSONStorableBool("Body Part: Mouth, Lips & Head", false);
                 RegisterBool(filterMouthJSON);
                 CreateToggle(filterMouthJSON, true);
-
-                filterHandsJSON = new JSONStorableBool("Body Part: Hands & Arms", false);
-                RegisterBool(filterHandsJSON);
-                CreateToggle(filterHandsJSON, true);
 
                 filterOtherJSON = new JSONStorableBool("Body Part: All Other Parts", false);
                 RegisterBool(filterOtherJSON);
@@ -436,7 +431,7 @@ namespace MVRPlugin {
             try {
                 if (target == null) return;
 
-                // 1. Attach forwarders to ALL child Colliders and Triggers (including glans/tip triggers that lack rigidbodies)
+                // 1. Attach forwarders to ALL child Colliders and Triggers (glans, penis, labia, hands, fingers)
                 Collider[] colliders = target.GetComponentsInChildren<Collider>(true);
                 foreach (Collider col in colliders) {
                     if (col == null || col.gameObject == null) continue;
@@ -480,46 +475,61 @@ namespace MVRPlugin {
             } catch (Exception) { }
         }
 
-        private bool IsBodyPartEnabled(string partName) {
-            if (string.IsNullOrEmpty(partName)) return true;
-            string lower = partName.ToLower();
+        private bool IsGenitalName(string name) {
+            if (string.IsNullOrEmpty(name)) return false;
+            string lower = name.ToLower();
+            return lower.Contains("pelvis") || lower.Contains("labia") || lower.Contains("vagina") ||
+                   lower.Contains("penis") || lower.Contains("testes") || lower.Contains("anus") ||
+                   lower.Contains("glute") || lower.Contains("genital") || lower.Contains("glans") ||
+                   lower.Contains("gland") || lower.Contains("shaft") || lower.Contains("scrotum") ||
+                   lower.Contains("clit") || lower.Contains("urethra") || lower.Contains("cervix") ||
+                   lower.Contains("gspot") || lower.Contains("foreskin") || lower.Contains("tip") ||
+                   lower.Contains("groin") || lower.Contains("crotch");
+        }
 
-            // Genitals & Pelvis (Comprehensive mapping for male glans, tip, shaft, testes + female triggers)
-            if (lower.Contains("pelvis") || lower.Contains("labia") || lower.Contains("vagina") ||
-                lower.Contains("penis") || lower.Contains("testes") || lower.Contains("anus") ||
-                lower.Contains("glute") || lower.Contains("genital") || lower.Contains("glans") ||
-                lower.Contains("gland") || lower.Contains("shaft") || lower.Contains("scrotum") ||
-                lower.Contains("clit") || lower.Contains("urethra") || lower.Contains("cervix") ||
-                lower.Contains("gspot") || lower.Contains("foreskin") || lower.Contains("tip") ||
-                lower.Contains("groin") || lower.Contains("crotch") || lower.Contains("head")) {
-                // If it contains head, check if it's head of penis (e.g. penisHead, glansHead) vs face head
-                if (lower == "head" || lower.Contains("headcontrol") || lower.Contains("face")) {
-                    return (filterMouthJSON != null && filterMouthJSON.val);
+        private bool IsHandName(string name) {
+            if (string.IsNullOrEmpty(name)) return false;
+            string lower = name.ToLower();
+            return lower.Contains("hand") || lower.Contains("finger") || lower.Contains("forearm") ||
+                   lower.Contains("arm") || lower.Contains("wrist") || lower.Contains("thumb") ||
+                   lower.Contains("index") || lower.Contains("mid") || lower.Contains("ring") ||
+                   lower.Contains("pinky") || lower.Contains("palm");
+        }
+
+        private bool IsBodyPartEnabled(string partName, GameObject otherObj) {
+            string lower = (partName != null) ? partName.ToLower() : "";
+            string otherLower = (otherObj != null) ? otherObj.name.ToLower() : "";
+
+            // 1. GENITAL INTERACTION (Either part being touched is genital OR incoming toucher is genital)
+            if (IsGenitalName(partName) || IsGenitalName(otherLower)) {
+                if (filterGenitalsJSON != null && filterGenitalsJSON.val) {
+                    return true;
                 }
-                return (filterGenitalsJSON != null && filterGenitalsJSON.val);
             }
 
-            // Breasts & Chest
+            // 2. HANDS & FINGERS
+            if (IsHandName(partName) || IsHandName(otherLower)) {
+                if (filterHandsJSON != null && filterHandsJSON.val) {
+                    return true;
+                }
+            }
+
+            // 3. BREASTS & CHEST
             if (lower.Contains("breast") || lower.Contains("nipple") || lower.Contains("chest") ||
-                lower.Contains("boob") || lower.Contains("areola") || lower.Contains("pec")) {
-                return (filterBreastsJSON != null && filterBreastsJSON.val);
+                lower.Contains("boob") || lower.Contains("areola") || lower.Contains("pec") ||
+                otherLower.Contains("breast") || otherLower.Contains("nipple")) {
+                if (filterBreastsJSON != null && filterBreastsJSON.val) {
+                    return true;
+                }
             }
 
-            // Mouth & Head
-            if (lower.Contains("head") || lower.Contains("mouth") || lower.Contains("lip") ||
-                lower.Contains("tongue") || lower.Contains("jaw") || lower.Contains("neck") ||
-                lower.Contains("face") || lower.Contains("chin") || lower.Contains("cheek") ||
-                lower.Contains("throat")) {
-                return (filterMouthJSON != null && filterMouthJSON.val);
-            }
-
-            // Hands & Arms
-            if (lower.Contains("hand") || lower.Contains("finger") || lower.Contains("forearm") ||
-                lower.Contains("arm") || lower.Contains("wrist") || lower.Contains("thumb") ||
-                lower.Contains("index") || lower.Contains("mid") || lower.Contains("ring") ||
-                lower.Contains("pinky") || lower.Contains("palm") || lower.Contains("bicep") ||
-                lower.Contains("elbow")) {
-                return (filterHandsJSON != null && filterHandsJSON.val);
+            // 4. MOUTH & HEAD
+            if (lower.Contains("mouth") || lower.Contains("lip") || lower.Contains("tongue") ||
+                lower.Contains("jaw") || lower.Contains("neck") || lower.Contains("face") ||
+                otherLower.Contains("mouth") || otherLower.Contains("lip") || otherLower.Contains("tongue")) {
+                if (filterMouthJSON != null && filterMouthJSON.val) {
+                    return true;
+                }
             }
 
             return (filterOtherJSON != null && filterOtherJSON.val);
@@ -582,40 +592,39 @@ namespace MVRPlugin {
 
         public void HandleCollision(string partName, Collision collision) {
             if (enabledJSON == null || !enabledJSON.val) return;
-            if (!IsBodyPartEnabled(partName)) return;
             if (collision == null || collision.collider == null) return;
 
+            GameObject otherObj = collision.collider.gameObject;
+            if (!IsBodyPartEnabled(partName, otherObj)) return;
+
             string sourceName;
-            if (!IsTouchingSourceAllowed(collision.collider.gameObject, out sourceName)) {
+            if (!IsTouchingSourceAllowed(otherObj, out sourceName)) {
                 return;
             }
 
             float relVel = collision.relativeVelocity.magnitude;
-            float minThreshold = (minForceThresholdJSON != null) ? minForceThresholdJSON.val : 0.05f;
-            if (relVel < minThreshold) {
-                return;
-            }
-
-            RegisterActiveTouch(partName, sourceName, relVel);
+            RegisterActiveTouch(partName, otherObj.name, sourceName, relVel);
         }
 
         public void HandleTrigger(string partName, Collider other) {
             if (enabledJSON == null || !enabledJSON.val) return;
-            if (!IsBodyPartEnabled(partName)) return;
             if (other == null) return;
 
+            GameObject otherObj = other.gameObject;
+            if (!IsBodyPartEnabled(partName, otherObj)) return;
+
             string sourceName;
-            if (!IsTouchingSourceAllowed(other.gameObject, out sourceName)) {
+            if (!IsTouchingSourceAllowed(otherObj, out sourceName)) {
                 return;
             }
 
-            RegisterActiveTouch(partName, sourceName, 1.0f);
+            RegisterActiveTouch(partName, otherObj.name, sourceName, 1.0f);
         }
 
-        private void RegisterActiveTouch(string partName, string sourceName, float relativeVelocity) {
+        private void RegisterActiveTouch(string partName, string colliderName, string sourceName, float relativeVelocity) {
             isTouching = true;
             lastTouchTime = Time.time;
-            lastTouchedPart = partName;
+            lastTouchedPart = string.Format("{0} -> {1}", partName, colliderName);
             lastTouchingSource = sourceName;
 
             if (enableImpactForceJSON != null && enableImpactForceJSON.val) {
@@ -806,7 +815,7 @@ namespace MVRPlugin {
                 if (statusJSON != null) {
                     string stateStr;
                     if (isTouching) {
-                        stateStr = string.Format("[DURING: {0} by {1}]", lastTouchedPart, lastTouchingSource);
+                        stateStr = string.Format("[DURING: {0} ({1})]", lastTouchedPart, lastTouchingSource);
                     }
                     else if (isFadingActive) {
                         stateStr = "[RELEASE FADING...]";
