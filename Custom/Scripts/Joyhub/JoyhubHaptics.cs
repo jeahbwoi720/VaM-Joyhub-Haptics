@@ -18,25 +18,25 @@ namespace MVRPlugin {
 
             void OnCollisionEnter(Collision collision) {
                 if (parentPlugin != null && enabled) {
-                    parentPlugin.HandleTouch(bodyPartName, collision.relativeVelocity.magnitude);
+                    parentPlugin.HandleCollision(bodyPartName, collision);
                 }
             }
 
             void OnCollisionStay(Collision collision) {
                 if (parentPlugin != null && enabled) {
-                    parentPlugin.HandleTouch(bodyPartName, collision.relativeVelocity.magnitude);
+                    parentPlugin.HandleCollision(bodyPartName, collision);
                 }
             }
 
             void OnTriggerEnter(Collider other) {
                 if (parentPlugin != null && enabled) {
-                    parentPlugin.HandleTouch(bodyPartName, 1.0f);
+                    parentPlugin.HandleTrigger(bodyPartName, other);
                 }
             }
 
             void OnTriggerStay(Collider other) {
                 if (parentPlugin != null && enabled) {
-                    parentPlugin.HandleTouch(bodyPartName, 1.0f);
+                    parentPlugin.HandleTrigger(bodyPartName, other);
                 }
             }
         }
@@ -103,7 +103,6 @@ namespace MVRPlugin {
 
         private List<JoyhubCollisionForwarder> activeForwarders = new List<JoyhubCollisionForwarder>();
 
-        // Helper to create clean visual section headers with Unity Rich Text
         private void CreateSectionHeader(string title, string hexColor, bool rightSide) {
             try {
                 UIDynamic spacer = CreateSpacer(rightSide);
@@ -327,10 +326,36 @@ namespace MVRPlugin {
             return (filterOtherJSON != null && filterOtherJSON.val);
         }
 
-        public void HandleTouch(string partName, float relativeVelocity) {
+        public void HandleCollision(string partName, Collision collision) {
             if (enabledJSON == null || !enabledJSON.val) return;
             if (!IsBodyPartEnabled(partName)) return;
 
+            // IGNORE SELF-COLLISIONS: Skip if colliding object belongs to the same Person atom
+            if (collision != null && collision.collider != null && containingAtom != null) {
+                if (collision.collider.transform.IsChildOf(containingAtom.transform)) {
+                    return;
+                }
+            }
+
+            float relVel = (collision != null) ? collision.relativeVelocity.magnitude : 1.0f;
+            RegisterActiveTouch(partName, relVel);
+        }
+
+        public void HandleTrigger(string partName, Collider other) {
+            if (enabledJSON == null || !enabledJSON.val) return;
+            if (!IsBodyPartEnabled(partName)) return;
+
+            // IGNORE SELF-TRIGGERS: Skip if trigger overlap belongs to the same Person atom
+            if (other != null && containingAtom != null) {
+                if (other.transform.IsChildOf(containingAtom.transform)) {
+                    return;
+                }
+            }
+
+            RegisterActiveTouch(partName, 1.0f);
+        }
+
+        private void RegisterActiveTouch(string partName, float relativeVelocity) {
             isTouching = true;
             lastTouchTime = Time.time;
             lastTouchedPart = partName;
@@ -382,8 +407,8 @@ namespace MVRPlugin {
                     InitUDP((int)portJSON.val);
                 }
 
-                // Check touch release timeout
-                if (Time.time - lastTouchTime > 0.12f) {
+                // Check touch release timeout (0.08s after last physical touch event)
+                if (Time.time - lastTouchTime > 0.08f) {
                     isTouching = false;
                 }
 
@@ -402,7 +427,8 @@ namespace MVRPlugin {
                 lastSendTime = Time.time;
 
                 float finalIntensity = 0f;
-                bool isCurrentlyActiveTouch = isTouching || touchIntensity > 5f || burstIntensity > 5f;
+                bool isCurrentlyActiveTouch = isTouching;
+                bool isFading = touchIntensity > 5f || burstIntensity > 5f;
 
                 // Active features selection (Before vs. During Touch)
                 bool activeHeat;
@@ -423,9 +449,9 @@ namespace MVRPlugin {
                     activeSqueeze = duringSqueezeJSON != null ? Mathf.RoundToInt(duringSqueezeJSON.val) : 0;
                     activePump = duringPumpJSON != null && duringPumpJSON.val;
                 }
-                else if (isCurrentlyActiveTouch) {
-                    // DURING TOUCH STATE
-                    float duringBase = duringVibeJSON != null ? duringVibeJSON.val : 85f;
+                else if (isCurrentlyActiveTouch || isFading) {
+                    // DURING TOUCH / FADING RELEASE STATE
+                    float duringBase = isCurrentlyActiveTouch ? (duringVibeJSON != null ? duringVibeJSON.val : 85f) : 0f;
 
                     // Motion Velocity Tracking
                     float velocityIntensity = 0f;
@@ -439,15 +465,25 @@ namespace MVRPlugin {
                     float maxTouchVal = Mathf.Max(touchIntensity, burstIntensity);
                     finalIntensity = Mathf.Max(duringBase + velocityIntensity, maxTouchVal);
 
-                    ch2Val = duringCh2JSON != null ? duringCh2JSON.val : finalIntensity;
-                    ch3Val = duringCh3JSON != null ? duringCh3JSON.val : 0f;
-                    ch4Val = duringCh4JSON != null ? duringCh4JSON.val : 0f;
+                    ch2Val = duringCh2JSON != null ? (finalIntensity * (duringCh2JSON.val / 100f)) : finalIntensity;
+                    ch3Val = duringCh3JSON != null ? (finalIntensity * (duringCh3JSON.val / 100f)) : 0f;
+                    ch4Val = duringCh4JSON != null ? (finalIntensity * (duringCh4JSON.val / 100f)) : 0f;
 
-                    activeHeat = duringHeatJSON != null && duringHeatJSON.val;
-                    activeLight = duringLightJSON != null && duringLightJSON.val;
-                    activeSuck = duringSuckJSON != null ? Mathf.RoundToInt(duringSuckJSON.val) : 0;
-                    activeSqueeze = duringSqueezeJSON != null ? Mathf.RoundToInt(duringSqueezeJSON.val) : 0;
-                    activePump = duringPumpJSON != null && duringPumpJSON.val;
+                    // Features switch to DURING when touching, or smoothly revert to BEFORE when released
+                    if (isCurrentlyActiveTouch) {
+                        activeHeat = duringHeatJSON != null && duringHeatJSON.val;
+                        activeLight = duringLightJSON != null && duringLightJSON.val;
+                        activeSuck = duringSuckJSON != null ? Mathf.RoundToInt(duringSuckJSON.val) : 0;
+                        activeSqueeze = duringSqueezeJSON != null ? Mathf.RoundToInt(duringSqueezeJSON.val) : 0;
+                        activePump = duringPumpJSON != null && duringPumpJSON.val;
+                    }
+                    else {
+                        activeHeat = beforeHeatJSON != null && beforeHeatJSON.val;
+                        activeLight = beforeLightJSON != null && beforeLightJSON.val;
+                        activeSuck = beforeSuckJSON != null ? Mathf.RoundToInt(beforeSuckJSON.val) : 0;
+                        activeSqueeze = beforeSqueezeJSON != null ? Mathf.RoundToInt(beforeSqueezeJSON.val) : 0;
+                        activePump = beforePumpJSON != null && beforePumpJSON.val;
+                    }
                 }
                 else {
                     // BEFORE TOUCH (IDLE / PROXIMITY STATE)
@@ -496,7 +532,17 @@ namespace MVRPlugin {
 
                 // Update Status Display
                 if (statusJSON != null) {
-                    string stateStr = isCurrentlyActiveTouch ? string.Format("[DURING: {0}]", lastTouchedPart) : "[BEFORE TOUCH (IDLE)]";
+                    string stateStr;
+                    if (isCurrentlyActiveTouch) {
+                        stateStr = string.Format("[DURING: {0}]", lastTouchedPart);
+                    }
+                    else if (isFading) {
+                        stateStr = "[RELEASE FADING...]";
+                    }
+                    else {
+                        stateStr = "[BEFORE TOUCH (IDLE)]";
+                    }
+
                     statusJSON.val = string.Format("{0} -> Vibe:{1}% | H:{2} L:{3} S:{4} | Port {5}",
                         stateStr,
                         m1,
