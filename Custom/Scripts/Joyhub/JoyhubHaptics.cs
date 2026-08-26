@@ -81,6 +81,7 @@ namespace MVRPlugin {
         // Body Part Filters (What triggers haptics)
         private JSONStorableBool filterPenisJSON;
         private JSONStorableBool filterVaginaJSON;
+        private JSONStorableBool filterHipsJSON;
         private JSONStorableBool filterBreastsJSON;
         private JSONStorableBool filterMouthJSON;
         private JSONStorableBool filterHandsJSON;
@@ -171,7 +172,7 @@ namespace MVRPlugin {
 
         public override void Init() {
             try {
-                SuperController.LogMessage("Joyhub Advanced Haptics (Dedicated Toys & Objects) Loading...");
+                SuperController.LogMessage("Joyhub Advanced Haptics (Hips & Body Part Expansion) Loading...");
 
                 // ==================== LEFT COLUMN (rightSide = false) ====================
                 CreateSectionHeader("Master Plugin Control", false);
@@ -310,6 +311,10 @@ namespace MVRPlugin {
                 filterVaginaJSON = new JSONStorableBool("Body Part: Female Vagina & Labia", false);
                 RegisterBool(filterVaginaJSON);
                 CreateToggle(filterVaginaJSON, true);
+
+                filterHipsJSON = new JSONStorableBool("Body Part: Hips & Buttocks", false);
+                RegisterBool(filterHipsJSON);
+                CreateToggle(filterHipsJSON, true);
 
                 filterBreastsJSON = new JSONStorableBool("Body Part: Breasts & Chest", false);
                 RegisterBool(filterBreastsJSON);
@@ -562,6 +567,14 @@ namespace MVRPlugin {
                    lower.Contains("crotch") || lower.Contains("labiatrig") || lower.Contains("vaginatrig");
         }
 
+        // Dedicated Hips & Buttocks Detection
+        private bool IsHipsName(string name) {
+            if (string.IsNullOrEmpty(name)) return false;
+            string lower = name.ToLower();
+            return lower.Contains("hip") || lower.Contains("butt") || lower.Contains("glute") ||
+                   lower.Contains("thigh") || lower.Contains("waist") || lower.Contains("groin");
+        }
+
         private bool IsHandName(string name) {
             if (string.IsNullOrEmpty(name)) return false;
             string lower = name.ToLower();
@@ -599,7 +612,14 @@ namespace MVRPlugin {
                 }
             }
 
-            // 3. BREASTS & CHEST
+            // 3. HIPS & BUTTOCKS
+            if (IsHipsName(partName) || IsHipsName(otherLower)) {
+                if (filterHipsJSON != null && filterHipsJSON.val) {
+                    return true;
+                }
+            }
+
+            // 4. BREASTS & CHEST
             if (lower.Contains("breast") || lower.Contains("nipple") || lower.Contains("chest") ||
                 lower.Contains("boob") || lower.Contains("areola") || lower.Contains("pec") ||
                 otherLower.Contains("breast") || otherLower.Contains("nipple")) {
@@ -608,7 +628,7 @@ namespace MVRPlugin {
                 }
             }
 
-            // 4. MOUTH & HEAD
+            // 5. MOUTH & HEAD
             if (lower.Contains("mouth") || lower.Contains("lip") || lower.Contains("tongue") ||
                 lower.Contains("jaw") || lower.Contains("neck") || lower.Contains("face") ||
                 (lower.Contains("head") && !lower.Contains("penis")) ||
@@ -618,7 +638,7 @@ namespace MVRPlugin {
                 }
             }
 
-            // 5. GENERAL HAND & ARM TOUCH
+            // 6. GENERAL HAND & ARM TOUCH
             if (IsHandName(partName) || IsHandName(otherLower)) {
                 if (filterHandsJSON != null && filterHandsJSON.val) {
                     return true;
